@@ -3,12 +3,12 @@ use super::service::{Service, ServiceError};
 use super::{api, server, service};
 use crate::model;
 use crate::model::request::QueryResponse;
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use hyper::server::conn::http1;
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 use thiserror::Error;
-use tokio::sync::oneshot;
+use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 use wasmtime::component::Resource;
 use wasmtime::{
@@ -125,6 +125,10 @@ pub enum Command {
         message: String,
     },
 
+    CleanupInstance {
+        inst_id: InstanceId,
+    },
+
     DebugQuery {
         query: String,
         event: oneshot::Sender<QueryResponse>,
@@ -162,7 +166,7 @@ pub struct Runtime {
     running_server_instances: DashMap<InstanceId, InstanceHandle>,
 
     /// Name space populated
-    instance_name_space: DashMap<String, Uuid>,
+    instance_name_space: Arc<Mutex<DashSet<String>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -255,8 +259,13 @@ impl Service for Runtime {
             }
             .dispatch()
             .unwrap(),
+
             Command::GetVersion { event } => {
                 event.send(VERSION.to_string()).unwrap();
+            }
+
+            Command::CleanupInstance { inst_id } => {
+                self.cleanup_instance(inst_id).await;
             }
 
             Command::DebugQuery { query, event } => {
@@ -345,7 +354,7 @@ impl Runtime {
             programs_in_disk: DashMap::new(),
             running_instances: DashMap::new(),
             running_server_instances: DashMap::new(),
-            instance_name_space: DashMap::new(),
+            instance_name_space: Arc::new(Mutex::new(DashSet::new())),
         }
     }
 
@@ -361,6 +370,14 @@ impl Runtime {
             }
         }
         Ok(())
+    }
+
+    async fn cleanup_instance(&self, inst_id: InstanceId) {
+        if let Some((_, handle)) = self.running_instances.remove(&inst_id) {
+            if let Some(name) = handle.name {
+                self.instance_name_space.lock().await.remove(&name);
+            }
+        }
     }
 
     fn get_component(&self, hash: &str) -> Result<Component, RuntimeError> {
@@ -406,13 +423,17 @@ impl Runtime {
     ) -> Result<InstanceId, RuntimeError> {
         // TODO: interesting, running instances are never reaped
         //          only cleared when aborted
-        if let Some(name) = &name
-            && let Some(instance_id) = self.instance_name_space.get(name) // to make sure not reaped
-            && let Some(instance_handle) = self.running_instances.get(&instance_id)
-            && !(instance_handle.join_handle.is_finished())
-        {
-            return Err(RuntimeError::DuplicateProgramName(name.clone()));
-        };
+
+        if let Some(name) = &name {
+            let instance_name_space = self.instance_name_space.lock().await;
+            if instance_name_space.contains(name)
+            // to make sure not reaped
+            {
+                return Err(RuntimeError::DuplicateProgramName(name.to_string()));
+            } else {
+                instance_name_space.insert(name.clone())
+            };
+        }
 
         let component = self.get_component(hash)?;
 
@@ -433,13 +454,10 @@ impl Runtime {
         // Record in the “running_instances” so we can manage it later
         let instance_handle = InstanceHandle {
             hash: hash.to_string(),
-            name: name.clone(),
+            name,
             join_handle,
         };
         self.running_instances.insert(instance_id, instance_handle);
-        if let Some(name) = name {
-            self.instance_name_space.insert(name, instance_id);
-        }
 
         Ok(instance_id)
     }
@@ -479,7 +497,7 @@ impl Runtime {
     pub async fn terminate_instance(&self, instance_id: InstanceId, cause: TerminationCause) {
         if let Some((_, handle)) = self.running_instances.remove(&instance_id) {
             if let Some(name) = handle.name {
-                self.instance_name_space.remove(&name);
+                self.instance_name_space.lock().await.remove(&name);
             }
 
             handle.join_handle.abort();
@@ -685,6 +703,12 @@ impl Runtime {
                 .ok();
             }
         }
+
+        server::InstanceEvent::SendGracefulCleanupToRuntime {
+            inst_id: instance_id.clone(),
+        }
+        .dispatch()
+        .ok();
 
         // force cleanup of the remaining resources
         model::cleanup_instance(instance_id);

@@ -61,6 +61,9 @@ pub enum InstanceEvent {
         termination_code: u32,
         message: String,
     },
+    SendGracefulCleanupToRuntime {
+        inst_id: InstanceId,
+    },
 }
 
 #[derive(Debug)]
@@ -213,7 +216,8 @@ impl Service for Server {
                 let inst_id = match &event {
                     InstanceEvent::SendMsgToClient { inst_id, .. }
                     | InstanceEvent::DetachInstance { inst_id, .. }
-                    | InstanceEvent::SendBlobToClient { inst_id, .. } => *inst_id,
+                    | InstanceEvent::SendBlobToClient { inst_id, .. }
+                    | InstanceEvent::SendGracefulCleanupToRuntime { inst_id } => *inst_id,
                 };
 
                 // Send it to the client if it's connected
@@ -464,6 +468,9 @@ impl Session {
                 InstanceEvent::SendBlobToClient { inst_id, data } => {
                     self.handle_send_blob(inst_id, data).await;
                 }
+                InstanceEvent::SendGracefulCleanupToRuntime { inst_id } => {
+                    self.handle_send_graceful_cleanup_to_runtime(inst_id).await;
+                }
             },
         }
     }
@@ -519,6 +526,17 @@ impl Session {
             };
             self.send_inst_event(inst_id, event_code, message).await;
         }
+    }
+
+    async fn handle_send_graceful_cleanup_to_runtime(&mut self, inst_id: InstanceId) {
+        if !self.authenticated {
+            return;
+        }
+
+        // Forward the cleanup request to the runtime service
+        runtime::Command::CleanupInstance { inst_id }
+            .dispatch()
+            .ok();
     }
 
     async fn handle_authenticate(&mut self, corr_id: u32, token: String) {
