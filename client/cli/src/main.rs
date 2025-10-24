@@ -9,7 +9,11 @@ mod submit;
 use submit::SubmitArgs;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "Programmable Inference Command Line Interface")]
+#[command(
+    author,
+    version,
+    about = "Programmable Inference Command Line Interface"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -33,6 +37,7 @@ async fn main() -> Result<()> {
                 args.port,
                 args.auth_secret,
                 args.inferlet,
+                args.inferlet_name,
                 args.arguments,
             )
             .await?;

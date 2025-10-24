@@ -78,7 +78,10 @@ async fn main() -> Result<()> {
             run::handle_run_command(
                 engine_config,
                 backend_configs,
-                args.inferlet,
+                cli::service::InferletConfig {
+                    path: args.inferlet,
+                    name: args.inferlet_name,
+                },
                 args.arguments,
             )
             .await?;

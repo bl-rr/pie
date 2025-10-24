@@ -51,6 +51,9 @@ pub struct ShellRunArgs {
     #[arg(long, short)]
     pub stream_output: bool,
 
+    /// Session name for the inferlet.
+    pub inferlet_name: Option<String>,
+
     /// Arguments to pass to the Wasm program.
     pub arguments: Vec<String>,
 }
@@ -107,7 +110,10 @@ async fn handle_shell_command(
                 Ok(run_args) => {
                     if let Err(e) = service::submit_detached_inferlet(
                         client_config,
-                        run_args.inferlet_path,
+                        service::InferletConfig {
+                            path: run_args.inferlet_path,
+                            name: run_args.inferlet_name,
+                        },
                         run_args.arguments,
                         run_args.stream_output,
                         printer.clone(),

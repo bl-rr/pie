@@ -382,8 +382,22 @@ impl Session {
                     program_hash,
                     arguments,
                 } => {
-                    self.handle_launch_instance(corr_id, program_hash, arguments)
+                    self.handle_launch_instance(corr_id, program_hash, None, arguments)
                         .await
+                }
+                ClientMessage::LaunchInstanceWithName {
+                    corr_id,
+                    program_hash,
+                    program_name,
+                    arguments,
+                } => {
+                    self.handle_launch_instance(
+                        corr_id,
+                        program_hash,
+                        Some(program_name),
+                        arguments,
+                    )
+                    .await
                 }
                 ClientMessage::LaunchServerInstance {
                     corr_id,
@@ -677,6 +691,7 @@ impl Session {
         &mut self,
         corr_id: u32,
         program_hash: String,
+        program_name: Option<String>,
         arguments: Vec<String>,
     ) {
         if !self.authenticated {
@@ -686,10 +701,18 @@ impl Session {
         }
 
         let (evt_tx, evt_rx) = oneshot::channel();
-        runtime::Command::LaunchInstance {
-            program_hash,
-            arguments,
-            event: evt_tx,
+        match program_name {
+            Some(name) => runtime::Command::LaunchInstanceWithName {
+                program_hash,
+                program_name: name,
+                arguments,
+                event: evt_tx,
+            },
+            None => runtime::Command::LaunchInstance {
+                program_hash,
+                arguments,
+                event: evt_tx,
+            },
         }
         .dispatch()
         .unwrap();

@@ -28,6 +28,9 @@ pub struct SubmitArgs {
     /// Authentication secret for connecting to the server.
     #[arg(long)]
     pub auth_secret: Option<String>,
+    /// Session name for the inferlet.
+    #[arg(long)]
+    pub inferlet_name: Option<String>,
     /// Arguments to pass to the inferlet after `--`.
     #[arg(last = true)]
     pub arguments: Vec<String>,
@@ -47,6 +50,7 @@ pub async fn handle_submit_command(
     port: Option<u16>,
     auth_secret: Option<String>,
     inferlet_path: PathBuf,
+    inferlet_name: Option<String>,
     arguments: Vec<String>,
 ) -> Result<()> {
     // Read config file only if when any parameter is missing
@@ -76,6 +80,11 @@ pub async fn handle_submit_command(
         .or_else(|| config_file.as_ref().and_then(|cfg| cfg.auth_secret.clone()))
         .unwrap_or_else(engine::generate_random_auth_secret);
 
+    let inferlet_config = engine::InferletConfig {
+        path: inferlet_path,
+        name: inferlet_name,
+    };
+
     // Initialize the JWT secret for authentication
     auth::init_secret(&auth_secret);
 
@@ -83,7 +92,7 @@ pub async fn handle_submit_command(
     let client_config = engine::ClientConfig { host, port };
 
     // Submit the inferlet to the existing server
-    engine::submit_inferlet_and_wait(&client_config, inferlet_path, arguments).await?;
+    engine::submit_inferlet_and_wait(&client_config, inferlet_config, arguments).await?;
 
     Ok(())
 }

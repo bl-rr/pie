@@ -29,6 +29,13 @@ pub struct ClientConfig {
     pub auth_secret: String,
 }
 
+// Helper struct for inferlet submission
+#[derive(Debug, Clone)]
+pub struct InferletConfig {
+    pub path: PathBuf,
+    pub name: Option<String>,
+}
+
 /// Helper function to add a TOML value as a command-line argument.
 ///
 /// For boolean values: only adds the flag (--key) if the value is true.
@@ -353,12 +360,12 @@ pub async fn terminate_engine_and_backend(
 /// Submits an inferlet to the engine but does not wait for it to finish.
 pub async fn submit_detached_inferlet(
     client_config: &ClientConfig,
-    inferlet_path: PathBuf,
+    inferlet_config: InferletConfig,
     arguments: Vec<String>,
     stream_output: bool,
     printer: SharedPrinter,
 ) -> Result<()> {
-    let instance = submit_inferlet(client_config, inferlet_path, arguments).await?;
+    let instance = submit_inferlet(client_config, inferlet_config, arguments).await?;
 
     if stream_output {
         tokio::spawn(stream_inferlet_output(instance, Some(printer)));
@@ -370,24 +377,24 @@ pub async fn submit_detached_inferlet(
 /// Submits an inferlet to the engine and waits for it to finish.
 pub async fn submit_inferlet_and_wait(
     client_config: &ClientConfig,
-    inferlet_path: PathBuf,
+    inferlet_config: InferletConfig,
     arguments: Vec<String>,
     printer: Option<SharedPrinter>,
 ) -> Result<()> {
-    let instance = submit_inferlet(client_config, inferlet_path, arguments).await?;
+    let instance = submit_inferlet(client_config, inferlet_config, arguments).await?;
     stream_inferlet_output(instance, printer).await
 }
 
 /// Submits an inferlet to the engine and returns the instance.
 async fn submit_inferlet(
     client_config: &ClientConfig,
-    inferlet_path: PathBuf,
+    inferlet_config: InferletConfig,
     arguments: Vec<String>,
 ) -> Result<Instance> {
     let client = connect_and_authenticate(client_config).await?;
 
-    let inferlet_blob = fs::read(&inferlet_path)
-        .with_context(|| format!("Failed to read Wasm file at {:?}", inferlet_path))?;
+    let inferlet_blob = fs::read(&inferlet_config.path)
+        .with_context(|| format!("Failed to read Wasm file at {:?}", inferlet_config.path))?;
     let hash = client::hash_blob(&inferlet_blob);
     println!("Inferlet hash: {}", hash);
 
@@ -396,7 +403,9 @@ async fn submit_inferlet(
         println!("✅ Inferlet upload successful.");
     }
 
-    let instance = client.launch_instance(&hash, arguments).await?;
+    let instance = client
+        .launch_instance(hash, inferlet_config.name, arguments)
+        .await?;
     println!("✅ Inferlet launched with ID: {}", instance.id());
     Ok(instance)
 }

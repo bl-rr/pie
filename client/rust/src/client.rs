@@ -203,6 +203,7 @@ impl Client {
             ClientMessage::Authenticate { corr_id, .. }
             | ClientMessage::Query { corr_id, .. }
             | ClientMessage::LaunchInstance { corr_id, .. } => corr_id,
+            ClientMessage::LaunchInstanceWithName { corr_id, .. } => corr_id,
             _ => anyhow::bail!("Invalid message type for this helper"),
         };
         *corr_id_ref = corr_id_new;
@@ -290,14 +291,24 @@ impl Client {
 
     pub async fn launch_instance(
         &self,
-        program_hash: &str,
+        program_hash: String,
+        program_name: Option<String>,
         arguments: Vec<String>,
     ) -> Result<Instance> {
-        let msg = ClientMessage::LaunchInstance {
-            corr_id: 0,
-            program_hash: program_hash.to_string(),
-            arguments,
+        let msg = match program_name {
+            Some(name) => ClientMessage::LaunchInstanceWithName {
+                corr_id: 0,
+                program_hash,
+                program_name: name,
+                arguments,
+            },
+            None => ClientMessage::LaunchInstance {
+                corr_id: 0,
+                program_hash,
+                arguments,
+            },
         };
+
         let (successful, result) = self.send_msg_and_wait(msg).await?;
         if successful {
             let inst_id = Uuid::parse_str(&result)?;

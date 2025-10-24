@@ -60,6 +60,14 @@ pub enum ClientMessage {
         arguments: Vec<String>,
     },
 
+    #[serde(rename = "launch_instance_with_name")]
+    LaunchInstanceWithName {
+        corr_id: u32,
+        program_hash: String,
+        program_name: String,
+        arguments: Vec<String>,
+    },
+
     #[serde(rename = "launch_server_instance")]
     LaunchServerInstance {
         corr_id: u32,

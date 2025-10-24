@@ -15,26 +15,33 @@ pub struct ClientConfig {
     pub port: u16,
 }
 
+// Helper struct for inferlet submission
+#[derive(Debug, Clone)]
+pub struct InferletConfig {
+    pub path: PathBuf,
+    pub name: Option<String>,
+}
+
 /// Submits an inferlet to the engine and waits for it to finish.
 pub async fn submit_inferlet_and_wait(
     client_config: &ClientConfig,
-    inferlet_path: PathBuf,
+    inferlet_config: InferletConfig,
     arguments: Vec<String>,
 ) -> Result<()> {
-    let instance = submit_inferlet(client_config, inferlet_path, arguments).await?;
+    let instance = submit_inferlet(client_config, inferlet_config, arguments).await?;
     stream_inferlet_output(instance).await
 }
 
 /// Submits an inferlet to the engine and returns the instance.
 async fn submit_inferlet(
     client_config: &ClientConfig,
-    inferlet_path: PathBuf,
+    inferlet_config: InferletConfig,
     arguments: Vec<String>,
 ) -> Result<Instance> {
     let client = connect_and_authenticate(client_config).await?;
 
-    let inferlet_blob = fs::read(&inferlet_path)
-        .with_context(|| format!("Failed to read Wasm file at {:?}", inferlet_path))?;
+    let inferlet_blob = fs::read(&inferlet_config.path)
+        .with_context(|| format!("Failed to read Wasm file at {:?}", inferlet_config.name))?;
     let hash = client::hash_blob(&inferlet_blob);
     println!("Inferlet hash: {}", hash);
 
@@ -43,7 +50,9 @@ async fn submit_inferlet(
         println!("✅ Inferlet upload successful.");
     }
 
-    let instance = client.launch_instance(&hash, arguments).await?;
+    let instance = client
+        .launch_instance(hash, inferlet_config.name, arguments)
+        .await?;
     println!("✅ Inferlet launched with ID: {}", instance.id());
     Ok(instance)
 }

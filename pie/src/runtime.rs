@@ -69,6 +69,10 @@ pub enum RuntimeError {
         source: wasmtime::Error,
     },
 
+    /// Duplicate Program Name
+    #[error("Instance name '{0}' is already in use")]
+    DuplicateProgramName(String),
+
     /// Fallback for unexpected cases
     #[error("Runtime error: {0}")]
     Other(String),
@@ -93,6 +97,13 @@ pub enum Command {
 
     LaunchInstance {
         program_hash: String,
+        arguments: Vec<String>,
+        event: oneshot::Sender<Result<InstanceId, RuntimeError>>,
+    },
+
+    LaunchInstanceWithName {
+        program_hash: String,
+        program_name: String,
         arguments: Vec<String>,
         event: oneshot::Sender<Result<InstanceId, RuntimeError>>,
     },
@@ -149,6 +160,9 @@ pub struct Runtime {
 
     /// Running server instances
     running_server_instances: DashMap<InstanceId, InstanceHandle>,
+
+    /// Name space populated
+    instance_name_space: DashMap<String, Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -162,6 +176,7 @@ pub enum TerminationCause {
 
 pub struct InstanceHandle {
     pub hash: String,
+    pub name: Option<String>,
     //pub to_origin: Sender<ServerMessage>,
     // pub evt_from_system: Sender<String>,
     // pub evt_from_origin: Sender<String>,
@@ -203,8 +218,21 @@ impl Service for Runtime {
                 event,
                 arguments,
             } => {
-                let instance_id = self.launch_instance(&hash, arguments).await.unwrap();
+                let instance_id = self.launch_instance(&hash, None, arguments).await.unwrap();
                 event.send(Ok(instance_id)).unwrap();
+            }
+
+            Command::LaunchInstanceWithName {
+                program_hash: hash,
+                program_name: name,
+                event,
+                arguments,
+            } => {
+                let res = self.launch_instance(&hash, Some(name), arguments).await;
+                match res {
+                    Ok(instance_id) => event.send(Ok(instance_id)).unwrap(),
+                    Err(e) => event.send(Err(e)).unwrap(),
+                }
             }
 
             Command::LaunchServerInstance {
@@ -317,6 +345,7 @@ impl Runtime {
             programs_in_disk: DashMap::new(),
             running_instances: DashMap::new(),
             running_server_instances: DashMap::new(),
+            instance_name_space: DashMap::new(),
         }
     }
 
@@ -372,8 +401,19 @@ impl Runtime {
     pub async fn launch_instance(
         &self,
         hash: &str,
+        name: Option<String>,
         arguments: Vec<String>,
     ) -> Result<InstanceId, RuntimeError> {
+        // TODO: interesting, running instances are never reaped
+        //          only cleared when aborted
+        if let Some(name) = &name
+            && let Some(instance_id) = self.instance_name_space.get(name) // to make sure not reaped
+            && let Some(instance_handle) = self.running_instances.get(&instance_id)
+            && !(instance_handle.join_handle.is_finished())
+        {
+            return Err(RuntimeError::DuplicateProgramName(name.clone()));
+        };
+
         let component = self.get_component(hash)?;
 
         let instance_id = Uuid::new_v4();
@@ -393,9 +433,13 @@ impl Runtime {
         // Record in the “running_instances” so we can manage it later
         let instance_handle = InstanceHandle {
             hash: hash.to_string(),
+            name: name.clone(),
             join_handle,
         };
         self.running_instances.insert(instance_id, instance_handle);
+        if let Some(name) = name {
+            self.instance_name_space.insert(name, instance_id);
+        }
 
         Ok(instance_id)
     }
@@ -423,6 +467,7 @@ impl Runtime {
         let instance_handle = InstanceHandle {
             hash: hash.to_string(),
             join_handle,
+            name: None,
         };
         self.running_server_instances
             .insert(instance_id, instance_handle);
@@ -433,6 +478,10 @@ impl Runtime {
     /// Terminate (abort) a running instance
     pub async fn terminate_instance(&self, instance_id: InstanceId, cause: TerminationCause) {
         if let Some((_, handle)) = self.running_instances.remove(&instance_id) {
+            if let Some(name) = handle.name {
+                self.instance_name_space.remove(&name);
+            }
+
             handle.join_handle.abort();
 
             model::cleanup_instance(instance_id.clone());

@@ -21,6 +21,9 @@ pub struct RunArgs {
     /// A log file to write to.
     #[arg(long)]
     pub log: Option<PathBuf>,
+    /// Session name for the inferlet.
+    #[arg(long)]
+    pub inferlet_name: Option<String>,
     /// Arguments to pass to the inferlet after `--`.
     #[arg(last = true)]
     pub arguments: Vec<String>,
@@ -36,7 +39,7 @@ pub struct RunArgs {
 pub async fn handle_run_command(
     engine_config: EngineConfig,
     backend_configs: Vec<toml::Value>,
-    inferlet_path: PathBuf,
+    inferlet_config: service::InferletConfig,
     arguments: Vec<String>,
 ) -> Result<()> {
     // Start the engine and backend services
@@ -44,7 +47,7 @@ pub async fn handle_run_command(
         service::start_engine_and_backend(engine_config, backend_configs, None).await?;
 
     // Run the inferlet
-    service::submit_inferlet_and_wait(&client_config, inferlet_path, arguments, None).await?;
+    service::submit_inferlet_and_wait(&client_config, inferlet_config, arguments, None).await?;
 
     // Terminate the engine and backend services
     service::terminate_engine_and_backend(backend_processes, shutdown_tx, server_handle).await?;
