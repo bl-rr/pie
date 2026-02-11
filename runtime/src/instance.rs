@@ -158,6 +158,16 @@ impl InstanceState {
         let mut builder = WasiCtx::builder();
         builder.inherit_network(); // TODO: Replace with socket_addr_check later.
 
+        let halcyon_path = std::path::PathBuf::from("/home/leo/halcyon");
+        if halcyon_path.exists() {
+            let _ = builder.preopened_dir(
+                &halcyon_path,
+                "/home/leo/halcyon",
+                wasmtime_wasi::DirPerms::all(),
+                wasmtime_wasi::FilePerms::all(),
+            );
+        }
+
         // Create LogStream instances and keep handles for delivery mode control
         let stdout_stream = LogStream::new(OutputChannel::Stdout, id);
         let stderr_stream = LogStream::new(OutputChannel::Stderr, id);
