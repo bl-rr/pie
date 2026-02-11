@@ -1,0 +1,25 @@
+[package]
+name = "semantic-uncertainty-text-completion"
+version = "0.1.0"
+description = "Text completion with semantic entropy-based hallucination detection"
+authors = ["Pie Team"]
+
+[runtime]
+core = "^0.2.0"
+mcp = "^0.2.0"
+
+[parameters]
+prompt = {type = "str", description = "The prompt to generate text for"}
+max_tokens = {type = "int", optional = true, description = "Max tokens to generate (default: 256)"}
+system = {type = "str", optional = true, description = "System message (default: helpful assistant)"}
+temperature = {type = "float", optional = true, description = "Sampling temperature for main output (default: 0.6)"}
+top_p = {type = "float", optional = true, description = "Top-p sampling parameter (default: 0.95)"}
+num_generations = {type = "int", optional = true, description = "Number of high-temp generations for entropy (default: 5)"}
+high_temperature = {type = "float", optional = true, description = "Temperature for diversity generations (default: 1.0)"}
+entropy_threshold = {type = "float", optional = true, description = "Semantic entropy threshold for hallucination (default: 0.5)"}
+entailment_temperature = {type = "float", optional = true, description = "Temperature for entailment judgments (default: 0.02)"}
+seed = {type = "int", optional = true, description = "Random seed (default: 42)"}
+output = {type = "str", optional = true, description = "Path to write JSON output file"}
+
+[entrypoint]
+function = "semantic_uncertainty_text_completion"
