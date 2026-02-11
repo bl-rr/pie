@@ -680,11 +680,18 @@ impl Model {
             Ok(batch_resp) => {
                 let mut resp_iter = batch_resp.results.into_iter();
                 for (_, resp_tx) in requests {
-                    if let Some(tx) = resp_tx {
-                        if let Some(resp) = resp_iter.next() {
-                            tx.send(resp).ok();
-                        }
+                    // Always advance the iterator to keep responses aligned with requests
+                    // (even for flush requests that have None sender)
+                    if let Some(resp) = resp_iter.next()
+                        && let Some(tx) = resp_tx
+                    {
+                        tx.send(resp).ok();
                     }
+                    // if let Some(tx) = resp_tx {
+                    //     if let Some(resp) = resp_iter.next() {
+                    //         tx.send(resp).ok();
+                    //     }
+                    // }
                 }
             }
             Err(e) => {
