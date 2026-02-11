@@ -1,0 +1,18 @@
+[package]
+name = "roll-back"
+version = "0.1.0"
+description = "Roll back to a previous state"
+authors = ["Pie Team"]
+
+[runtime]
+core = "^0.2.0"
+mcp = "^0.2.0"
+
+[parameters]
+prompt = {type = "str", description = "The prompt to generate text for"}
+max_tokens = {type = "int", optional = true, description = "Max tokens to generate for each prompt (default: 128)"}
+roll_back_period = {type = "int", optional = true, description = "Number of tokens to roll back (default: 128)"}
+temperature = {type = "float", optional = true, description = "Temperature to use for generation (default: 0.0)"}
+
+[entrypoint]
+function = "roll_back"
