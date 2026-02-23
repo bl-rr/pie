@@ -76,6 +76,7 @@ cu130 = [
     "flashinfer-python>=0.6.1",
     "flashinfer-cubin>=0.6.1",
     "flashinfer-jit-cache>=0.6.1",
+    "triton; sys_platform == 'linux'",
 ]
 
 
@@ -128,6 +129,9 @@ torch = [
     { index = "pytorch-cu130", extra = "cu130" },
 ]
 
+# Nightly cu130 torch pins Triton to a +git build served from the same index.
+triton = [{ index = "pytorch-cu130", extra = "cu130" }]
+
 # --- FlashInfer JIT Cache Sources (only this package uses custom indexes) ---
 flashinfer-jit-cache = [
     { index = "flashinfer-cu128", extra = "cu128" },
@@ -142,7 +146,11 @@ manifest-path = "../runtime/Cargo.toml"
 features = ["pyo3/extension-module"]
 
 [tool.uv]
-cache-keys = [{file = "pyproject.toml"}, {file = "../runtime/Cargo.toml"}, {file = "../runtime/**/*.rs"}]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "../runtime/Cargo.toml" },
+    { file = "../runtime/**/*.rs" },
+]
 
 # Declare CUDA/Metal extras as mutually exclusive
 conflicts = [
