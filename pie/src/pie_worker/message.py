@@ -129,6 +129,17 @@ class DownloadAdapterResponse(msgspec.Struct, gc=False):
     adapter_data: bytes
 
 
+class ClassifyBatchRequest(msgspec.Struct, gc=False):
+    """Request message for batch NLI classification."""
+
+    pairs: list[tuple[str, str]]  # [(premise, hypothesis), ...]
+
+
+class ClassifyBatchResponse(msgspec.Struct, gc=False):
+    """Response message for batch NLI classification."""
+
+    results: list[dict]  # [{"label": str, "score": float}, ...]
+
 # ==============================================================================
 # 2. BATCHED REQUEST/RESPONSE TYPES (for RPC)
 # ==============================================================================

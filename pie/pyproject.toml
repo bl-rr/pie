@@ -41,6 +41,7 @@ dependencies = [
     "websockets>=15.0",
     "ztensor>=0.1.4",
     "textual>=7.2.0",
+    "transformers"
 ]
 
 [project.optional-dependencies]
@@ -123,10 +124,10 @@ explicit = true
 pie-client = { path = "../client/python", editable = true }
 
 # --- Torch Sources ---
-torch = [
-    { index = "pytorch-cu126", extra = "cu126" },
-    { index = "pytorch-cu130", extra = "cu130" },
-]
+# torch = [
+#     { index = "pytorch-cu126", extra = "cu126" },
+#     { index = "pytorch-cu130", extra = "cu130" },
+# ]
 
 # --- FlashInfer JIT Cache Sources (only this package uses custom indexes) ---
 flashinfer-jit-cache = [

@@ -1,0 +1,30 @@
+interface classify {
+
+    use wasi:io/poll@0.2.4.{pollable};
+    use common.{queue};
+
+    /// A single (premise, hypothesis) pair for NLI classification.
+    record classification-input {
+        premise: string,
+        hypothesis: string,
+    }
+
+    /// Classification result for a single pair.
+    record classification-output {
+        label: string,    // "entailment", "neutral", "contradiction"
+        score: f32,       // confidence score
+    }
+
+    /// Async result of a batch classification request.
+    resource classification-result {
+        pollable: func() -> pollable;
+        get: func() -> option<list<classification-output>>;
+    }
+
+    /// Submit a batch of (premise, hypothesis) pairs for NLI classification.
+    /// Returns an async result that can be polled for completion.
+    classify-batch: func(
+        queue: borrow<queue>,
+        inputs: list<classification-input>,
+    ) -> classification-result;
+}

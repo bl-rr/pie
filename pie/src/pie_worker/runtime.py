@@ -615,6 +615,17 @@ class Runtime:
                 value = "pong"
         return message.QueryResponse(value=value)
 
+    def classify_batch_rpc(self, **kwargs) -> dict:
+        """Handle classify_batch RPC by lazily loading a DeBERTa NLI model."""
+        if not hasattr(self, "_deberta_service"):
+            from .deberta_service import DeBERTaService
+            self._deberta_service = DeBERTaService()
+            self._log("Lazily loaded DeBERTa NLI service", "INFO")
+
+        req = message.ClassifyBatchRequest(**kwargs)
+        resp = self._deberta_service.classify_batch(req)
+        return {"results": resp.results}
+
     def embed_image(self, req: message.EmbedImageRequest) -> None:
         """Handle image embedding requests."""
         # TODO: implement image embedding

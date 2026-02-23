@@ -290,6 +290,31 @@ impl Queue {
         future.get().unwrap()
     }
 
+    /// Classify a batch of (premise, hypothesis) pairs using an NLI model.
+    ///
+    /// Returns a vector of (label, score) results for each input pair.
+    /// Labels are typically "entailment", "neutral", or "contradiction".
+    pub async fn classify_batch(&self, pairs: &[(String, String)]) -> Vec<(String, f32)> {
+        let inputs: Vec<api::classify::ClassificationInput> = pairs
+            .iter()
+            .map(|(premise, hypothesis)| api::classify::ClassificationInput {
+                premise: premise.clone(),
+                hypothesis: hypothesis.clone(),
+            })
+            .collect();
+
+        let future = api::classify::classify_batch(&self.inner, &inputs);
+        let pollable = future.pollable();
+        AsyncPollable::new(pollable).wait_for().await;
+
+        future
+            .get()
+            .unwrap()
+            .into_iter()
+            .map(|r| (r.label, r.score))
+            .collect()
+    }
+
     pub fn allocate_resources(&self, resource: Resource, count: u32) -> Vec<u32> {
         api::allocate_resources(&self.inner, resource as u32, count)
     }

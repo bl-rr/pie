@@ -19,7 +19,7 @@ use crate::instance::InstanceId;
 use anyhow::Result;
 
 use futures::future;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -31,7 +31,7 @@ use tokio::task::{self, JoinHandle};
 pub use batching::SchedulerConfig;
 
 /// Backend for RPC calls to Python via IPC.
-/// 
+///
 /// Uses cross-process IPC for GIL isolation in the symmetric worker architecture.
 #[derive(Clone)]
 pub struct RpcBackend {
@@ -255,21 +255,80 @@ pub enum Command {
         name: String,
     },
     // Actor Commands
-    ActorGlobalContextRef { username: String, uid: String },
-    ActorGlobalContextDestroy { username: String, uid: String },
-    ActorGlobalContextExtend { username: String, uid: String, page_ids: Vec<u32>, last_page_len: u32 },
-    ActorGlobalContextTrim { username: String, uid: String, len: u32 },
-    ActorGlobalContextRead { username: String, uid: String, num_tokens: u32, offset: u32, response: oneshot::Sender<Vec<u32>> },
-    ActorAdapterRef { username: String, uid: String },
-    ActorAdapterDestroy { username: String, uid: String },
-    ActorAdapterBlank { username: String, uid: String, rank: u32, alpha: f32 },
-    ActorAdapterLoad { username: String, uid: String, path: String },
-    ActorOptimizerRef { username: String, uid: String },
-    ActorOptimizerDestroy { username: String, uid: String },
-    ActorOptimizerLoad { username: String, uid: String, path: String },
-    ActorOptimizerSave { username: String, uid: String, path: String },
-    ActorOptimizerInitialize { username: String, uid: String, adapter_uid: String, params: Vec<u8> },
-    ActorOptimizerUpdate { username: String, uid: String, params: Vec<u8> },
+    ActorGlobalContextRef {
+        username: String,
+        uid: String,
+    },
+    ActorGlobalContextDestroy {
+        username: String,
+        uid: String,
+    },
+    ActorGlobalContextExtend {
+        username: String,
+        uid: String,
+        page_ids: Vec<u32>,
+        last_page_len: u32,
+    },
+    ActorGlobalContextTrim {
+        username: String,
+        uid: String,
+        len: u32,
+    },
+    ActorGlobalContextRead {
+        username: String,
+        uid: String,
+        num_tokens: u32,
+        offset: u32,
+        response: oneshot::Sender<Vec<u32>>,
+    },
+    ActorAdapterRef {
+        username: String,
+        uid: String,
+    },
+    ActorAdapterDestroy {
+        username: String,
+        uid: String,
+    },
+    ActorAdapterBlank {
+        username: String,
+        uid: String,
+        rank: u32,
+        alpha: f32,
+    },
+    ActorAdapterLoad {
+        username: String,
+        uid: String,
+        path: String,
+    },
+    ActorOptimizerRef {
+        username: String,
+        uid: String,
+    },
+    ActorOptimizerDestroy {
+        username: String,
+        uid: String,
+    },
+    ActorOptimizerLoad {
+        username: String,
+        uid: String,
+        path: String,
+    },
+    ActorOptimizerSave {
+        username: String,
+        uid: String,
+        path: String,
+    },
+    ActorOptimizerInitialize {
+        username: String,
+        uid: String,
+        adapter_uid: String,
+        params: Vec<u8>,
+    },
+    ActorOptimizerUpdate {
+        username: String,
+        uid: String,
+        params: Vec<u8>,
+    },
 }
 
 impl Command {
@@ -309,7 +368,11 @@ pub struct Model {
     max_batch_tokens: usize,
     max_batch_size: usize,
     /// Channel for forward pass requests (req, response_tx, group_id)
-    forward_pass_tx: mpsc::UnboundedSender<(ForwardPassRequest, Option<oneshot::Sender<ForwardPassResponse>>, usize)>,
+    forward_pass_tx: mpsc::UnboundedSender<(
+        ForwardPassRequest,
+        Option<oneshot::Sender<ForwardPassResponse>>,
+        usize,
+    )>,
     worker_handle: Option<JoinHandle<()>>,
     /// Scheduler configuration
     scheduler_config: SchedulerConfig,
@@ -324,10 +387,13 @@ impl Model {
     }
 
     /// Constructor that works with per-group IPC backends.
-    pub async fn new_with_backends(backends: Vec<RpcBackend>, scheduler_config: SchedulerConfig) -> Result<Self> {
+    pub async fn new_with_backends(
+        backends: Vec<RpcBackend>,
+        scheduler_config: SchedulerConfig,
+    ) -> Result<Self> {
         let num_groups = backends.len();
         let primary_backend = backends[0].clone();
-        
+
         // Handshake via primary backend
         let handshake_info = Self::handshake(&primary_backend).await?;
 
@@ -339,11 +405,13 @@ impl Model {
 
         // Create shared scheduler for adaptive batching (MultiGroup)
         // SharedScheduler is alias for Arc<Mutex<MultiGroupScheduler>>
-        let scheduler = Arc::new(Mutex::new(super::model::batching::MultiGroupScheduler::new(
-            scheduler_config.clone(),
-            max_batch_size,
-            num_groups,
-        )));
+        let scheduler = Arc::new(Mutex::new(
+            super::model::batching::MultiGroupScheduler::new(
+                scheduler_config.clone(),
+                max_batch_size,
+                num_groups,
+            ),
+        ));
 
         let worker_handle = tokio::spawn(Self::inference_worker(
             backends.clone(),
@@ -396,7 +464,9 @@ impl Model {
 
     async fn handshake(backend: &RpcBackend) -> Result<HandshakeResponse> {
         const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
-        let req = HandshakeRequest { version: "0.1.0".to_string() };
+        let req = HandshakeRequest {
+            version: "0.1.0".to_string(),
+        };
         let response: HandshakeResponse = backend
             .call_with_timeout("handshake", &req, HANDSHAKE_TIMEOUT)
             .await?;
@@ -421,7 +491,11 @@ impl Model {
     /// - Uses per-group backends for parallel DP execution
     async fn inference_worker(
         backends: Vec<RpcBackend>,
-        mut req_rx: mpsc::UnboundedReceiver<(ForwardPassRequest, Option<oneshot::Sender<ForwardPassResponse>>, usize)>,
+        mut req_rx: mpsc::UnboundedReceiver<(
+            ForwardPassRequest,
+            Option<oneshot::Sender<ForwardPassResponse>>,
+            usize,
+        )>,
         mut shutdown_rx: broadcast::Receiver<()>,
         max_batch_tokens: usize,
         max_batch_size: usize,
@@ -433,13 +507,18 @@ impl Model {
         const SCHEDULER_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
         // State per group
-        let mut batches: Vec<Vec<(ForwardPassRequest, Option<oneshot::Sender<ForwardPassResponse>>)>> = 
-            (0..num_groups).map(|_| Vec::new()).collect();
+        let mut batches: Vec<
+            Vec<(
+                ForwardPassRequest,
+                Option<oneshot::Sender<ForwardPassResponse>>,
+            )>,
+        > = (0..num_groups).map(|_| Vec::new()).collect();
         let mut group_tokens: Vec<usize> = vec![0; num_groups];
         let mut in_flight_counts: Vec<usize> = vec![0; num_groups];
 
         // Channel for batch completions (batch_size, tokens, latency, group_id)
-        let (completion_tx, mut completion_rx) = mpsc::unbounded_channel::<(usize, usize, Duration, usize)>();
+        let (completion_tx, mut completion_rx) =
+            mpsc::unbounded_channel::<(usize, usize, Duration, usize)>();
 
         // PROFILING: Track request rates and batch firing
         let mut prof_requests_received: Vec<usize> = vec![0; num_groups];
@@ -448,7 +527,9 @@ impl Model {
 
         loop {
             // Process any completed batches (non-blocking) - from any group
-            while let Ok((batch_size, tokens_in_batch, latency, group_id)) = completion_rx.try_recv() {
+            while let Ok((batch_size, tokens_in_batch, latency, group_id)) =
+                completion_rx.try_recv()
+            {
                 if group_id < num_groups {
                     if in_flight_counts[group_id] > 0 {
                         in_flight_counts[group_id] -= 1;
@@ -502,7 +583,9 @@ impl Model {
                         prof_requests_received[group_id] += 1;
 
                         // Stop accumulating if THIS group hit capacity to avoid latency spikes
-                        if batches[group_id].len() >= max_batch_size || group_tokens[group_id] >= max_batch_tokens {
+                        if batches[group_id].len() >= max_batch_size
+                            || group_tokens[group_id] >= max_batch_tokens
+                        {
                             break;
                         }
                     }
@@ -523,7 +606,14 @@ impl Model {
 
                 let should_fire = {
                     let mut sched = scheduler.lock().unwrap();
-                    sched.should_fire(group_id, batch_len, total_tok, max_batch_size, max_batch_tokens, in_flight)
+                    sched.should_fire(
+                        group_id,
+                        batch_len,
+                        total_tok,
+                        max_batch_size,
+                        max_batch_tokens,
+                        in_flight,
+                    )
                 };
 
                 if should_fire && in_flight < max_in_flight_batches {
@@ -534,7 +624,7 @@ impl Model {
                     fired_any = true;
                     prof_batches_fired[group_id] += 1;
 
-                     {
+                    {
                         let mut sched = scheduler.lock().unwrap();
                         sched.on_batch_fired(group_id);
                     }
@@ -544,12 +634,20 @@ impl Model {
                     let completion_tx_clone = completion_tx.clone();
                     let batch_size = batch_len;
                     let tokens_in_batch = total_tok;
-                    
+
                     tokio::spawn(async move {
-                         let start_time = Instant::now();
-                         Self::execute_forward_pass_batch(&backend_clone, batch_to_fire, group_id, REQUEST_TIMEOUT).await;
-                         let latency = start_time.elapsed();
-                         completion_tx_clone.send((batch_size, tokens_in_batch, latency, group_id)).ok();
+                        let start_time = Instant::now();
+                        Self::execute_forward_pass_batch(
+                            &backend_clone,
+                            batch_to_fire,
+                            group_id,
+                            REQUEST_TIMEOUT,
+                        )
+                        .await;
+                        let latency = start_time.elapsed();
+                        completion_tx_clone
+                            .send((batch_size, tokens_in_batch, latency, group_id))
+                            .ok();
                     });
                 }
             }
@@ -558,24 +656,32 @@ impl Model {
             if prof_last_report.elapsed().as_secs() >= 10 {
                 let total_reqs: usize = prof_requests_received.iter().sum();
                 let total_batches: usize = prof_batches_fired.iter().sum();
-                eprintln!("[RUST PROFILING] Reqs: {:?} ({}) | Batches: {:?} ({}) | InFlight: {:?}",
-                    prof_requests_received, total_reqs,
-                    prof_batches_fired, total_batches,
-                    in_flight_counts);
+                eprintln!(
+                    "[RUST PROFILING] Reqs: {:?} ({}) | Batches: {:?} ({}) | InFlight: {:?}",
+                    prof_requests_received,
+                    total_reqs,
+                    prof_batches_fired,
+                    total_batches,
+                    in_flight_counts
+                );
                 // Reset counters
-                for c in &mut prof_requests_received { *c = 0; }
-                for c in &mut prof_batches_fired { *c = 0; }
+                for c in &mut prof_requests_received {
+                    *c = 0;
+                }
+                for c in &mut prof_batches_fired {
+                    *c = 0;
+                }
                 prof_last_report = Instant::now();
             }
 
             // Wait logic
             if !fired_any {
-                 // If any group is at in-flight limit, we must wait for completion
-                 let any_at_limit = in_flight_counts.iter().any(|&c| c >= max_in_flight_batches);
-                 
-                 if any_at_limit {
-                     // Wait for completion (limiting factors) OR shutdown
-                     tokio::select! {
+                // If any group is at in-flight limit, we must wait for completion
+                let any_at_limit = in_flight_counts.iter().any(|&c| c >= max_in_flight_batches);
+
+                if any_at_limit {
+                    // Wait for completion (limiting factors) OR shutdown
+                    tokio::select! {
                         _ = shutdown_rx.recv() => break,
                         maybe_completion = completion_rx.recv() => {
                             if let Some((batch_size, tokens_in_batch, latency, group_id)) = maybe_completion {
@@ -589,28 +695,28 @@ impl Model {
                             }
                         }
                     }
-                 } else {
-                     // Just wait briefly for more requests
-                     tokio::select! {
-                        _ = shutdown_rx.recv() => break,
-                        _ = tokio::time::sleep(SCHEDULER_POLL_INTERVAL) => {}
-                        maybe_req = req_rx.recv() => {
-                             match maybe_req {
-                                Some((req, tx, group_id)) => {
-                                    let group_id = std::cmp::min(group_id, num_groups - 1);
-                                    {
-                                        let mut sched = scheduler.lock().unwrap();
-                                        let arrival_time = req.arrival_time.unwrap_or_else(Instant::now);
-                                        sched.on_request_arrival(group_id, arrival_time);
-                                    }
-                                    group_tokens[group_id] += req.input_tokens.len();
-                                    batches[group_id].push((req, tx));
-                                }
-                                None => break,
-                            }
-                         }
-                     }
-                 }
+                } else {
+                    // Just wait briefly for more requests
+                    tokio::select! {
+                       _ = shutdown_rx.recv() => break,
+                       _ = tokio::time::sleep(SCHEDULER_POLL_INTERVAL) => {}
+                       maybe_req = req_rx.recv() => {
+                            match maybe_req {
+                               Some((req, tx, group_id)) => {
+                                   let group_id = std::cmp::min(group_id, num_groups - 1);
+                                   {
+                                       let mut sched = scheduler.lock().unwrap();
+                                       let arrival_time = req.arrival_time.unwrap_or_else(Instant::now);
+                                       sched.on_request_arrival(group_id, arrival_time);
+                                   }
+                                   group_tokens[group_id] += req.input_tokens.len();
+                                   batches[group_id].push((req, tx));
+                               }
+                               None => break,
+                           }
+                        }
+                    }
+                }
             }
         }
 
@@ -618,19 +724,25 @@ impl Model {
         for group_id in 0..num_groups {
             if !batches[group_id].is_empty() {
                 let batch = std::mem::take(&mut batches[group_id]);
-                Self::execute_forward_pass_batch(&backends[group_id], batch, group_id, REQUEST_TIMEOUT).await;
+                Self::execute_forward_pass_batch(
+                    &backends[group_id],
+                    batch,
+                    group_id,
+                    REQUEST_TIMEOUT,
+                )
+                .await;
             }
         }
 
         // Wait for all in-flight batches (sum of all counts)
         while in_flight_counts.iter().sum::<usize>() > 0 {
-             if let Some((_, _, _, group_id)) = completion_rx.recv().await {
-                 if group_id < num_groups && in_flight_counts[group_id] > 0 {
-                     in_flight_counts[group_id] -= 1;
-                 }
-             } else {
-                 break;
-             }
+            if let Some((_, _, _, group_id)) = completion_rx.recv().await {
+                if group_id < num_groups && in_flight_counts[group_id] > 0 {
+                    in_flight_counts[group_id] -= 1;
+                }
+            } else {
+                break;
+            }
         }
     }
 
@@ -642,7 +754,10 @@ impl Model {
     )]
     async fn execute_forward_pass_batch(
         backend: &RpcBackend,
-        requests: Vec<(ForwardPassRequest, Option<oneshot::Sender<ForwardPassResponse>>)>,
+        requests: Vec<(
+            ForwardPassRequest,
+            Option<oneshot::Sender<ForwardPassResponse>>,
+        )>,
         group_id: usize,
         timeout: Duration,
     ) {
@@ -711,7 +826,7 @@ impl Model {
             Request::ForwardPass(mut fp_req, resp_tx) => {
                 // Capture arrival time before queuing to avoid measurement distortion
                 // when requests pile up behind the in-flight limit.
-                
+
                 // Lookup group ID from resource manager
                 let group_id = if let Some(inst_id) = fp_req.inst_id {
                     self.resource_manager.get_group(&inst_id).unwrap_or(0)
@@ -719,7 +834,11 @@ impl Model {
                     0
                 };
 
-                if self.forward_pass_tx.send((fp_req, resp_tx, group_id)).is_err() {
+                if self
+                    .forward_pass_tx
+                    .send((fp_req, resp_tx, group_id))
+                    .is_err()
+                {
                     eprintln!("[Error] Forward pass channel closed");
                 }
             }
@@ -771,6 +890,21 @@ impl Model {
                     }
                 });
             }
+            Request::ClassifyBatch(req, resp_tx) => {
+                const TIMEOUT: Duration = Duration::from_secs(30);
+                let backend = self.primary_backend.clone();
+                tokio::spawn(async move {
+                    match backend
+                        .call_with_timeout("classify_batch", &req, TIMEOUT)
+                        .await
+                    {
+                        Ok(resp) => {
+                            resp_tx.send(resp).ok();
+                        }
+                        Err(e) => eprintln!("[Error] classify_batch failed: {:?}", e),
+                    }
+                });
+            }
             Request::Handshake(_, _) => {
                 eprintln!("[Warn] Unexpected handshake request in submit");
             }
@@ -787,15 +921,25 @@ impl Model {
         // Add throughput and latency from scheduler
         if let Ok(sched) = self.scheduler.lock() {
             let (tps, avg_lat) = sched.get_aggregate_metrics();
-            stats.insert("model.throughput.tokens_per_second".to_string(), format!("{:.1}", tps));
-            stats.insert("model.latency.avg_ms".to_string(), format!("{:.1}", avg_lat));
+            stats.insert(
+                "model.throughput.tokens_per_second".to_string(),
+                format!("{:.1}", tps),
+            );
+            stats.insert(
+                "model.latency.avg_ms".to_string(),
+                format!("{:.1}", avg_lat),
+            );
         }
         stats
     }
 
     async fn handle(&mut self, cmd: Command) {
         match cmd {
-            Command::Submit { cmd_queue_id, priority, req } => {
+            Command::Submit {
+                cmd_queue_id,
+                priority,
+                req,
+            } => {
                 self.submit(cmd_queue_id, priority, req);
             }
             Command::GetInfo { response } => {
@@ -804,13 +948,27 @@ impl Model {
             Command::GetRuntimeStats { response } => {
                 response.send(self.runtime_stats()).ok();
             }
-            Command::Allocate { inst_id, type_id, count, response } => {
-                match self.resource_manager.allocate_with_oom(inst_id, type_id, count) {
-                    Ok(allocated_ids) => { response.send(allocated_ids).ok(); }
+            Command::Allocate {
+                inst_id,
+                type_id,
+                count,
+                response,
+            } => {
+                match self
+                    .resource_manager
+                    .allocate_with_oom(inst_id, type_id, count)
+                {
+                    Ok(allocated_ids) => {
+                        response.send(allocated_ids).ok();
+                    }
                     Err(e) => terminate_instance_with_exception(inst_id, e),
                 }
             }
-            Command::Deallocate { inst_id, type_id, ptrs } => {
+            Command::Deallocate {
+                inst_id,
+                type_id,
+                ptrs,
+            } => {
                 if let Err(e) = self.resource_manager.deallocate(inst_id, type_id, ptrs) {
                     terminate_instance_with_exception(inst_id, e);
                 }
@@ -821,39 +979,55 @@ impl Model {
                 }
             }
             Command::GetAllExported { type_id, response } => {
-                response.send(self.resource_manager.get_all_exported(type_id)).ok();
+                response
+                    .send(self.resource_manager.get_all_exported(type_id))
+                    .ok();
             }
-            Command::Export { inst_id, type_id, ptrs, name } => {
+            Command::Export {
+                inst_id,
+                type_id,
+                ptrs,
+                name,
+            } => {
                 if let Err(e) = self.resource_manager.export(inst_id, type_id, ptrs, name) {
                     terminate_instance_with_exception(inst_id, e);
                 }
             }
-            Command::Import { inst_id, type_id, name, response } => {
-                match self.resource_manager.import(type_id, name) {
-                    Ok(ptrs) => { response.send(ptrs).ok(); }
-                    Err(e) => terminate_instance_with_exception(inst_id, e),
+            Command::Import {
+                inst_id,
+                type_id,
+                name,
+                response,
+            } => match self.resource_manager.import(type_id, name) {
+                Ok(ptrs) => {
+                    response.send(ptrs).ok();
                 }
-            }
-            Command::ReleaseExported { inst_id, type_id, name } => {
+                Err(e) => terminate_instance_with_exception(inst_id, e),
+            },
+            Command::ReleaseExported {
+                inst_id,
+                type_id,
+                name,
+            } => {
                 if let Err(e) = self.resource_manager.release_exported(type_id, name) {
                     terminate_instance_with_exception(inst_id, e);
                 }
             }
             // Actor Commands (stubs)
-            Command::ActorGlobalContextRef { .. } |
-            Command::ActorGlobalContextDestroy { .. } |
-            Command::ActorGlobalContextExtend { .. } |
-            Command::ActorGlobalContextTrim { .. } |
-            Command::ActorAdapterRef { .. } |
-            Command::ActorAdapterDestroy { .. } |
-            Command::ActorAdapterBlank { .. } |
-            Command::ActorAdapterLoad { .. } |
-            Command::ActorOptimizerRef { .. } |
-            Command::ActorOptimizerDestroy { .. } |
-            Command::ActorOptimizerLoad { .. } |
-            Command::ActorOptimizerSave { .. } |
-            Command::ActorOptimizerInitialize { .. } |
-            Command::ActorOptimizerUpdate { .. } => {}
+            Command::ActorGlobalContextRef { .. }
+            | Command::ActorGlobalContextDestroy { .. }
+            | Command::ActorGlobalContextExtend { .. }
+            | Command::ActorGlobalContextTrim { .. }
+            | Command::ActorAdapterRef { .. }
+            | Command::ActorAdapterDestroy { .. }
+            | Command::ActorAdapterBlank { .. }
+            | Command::ActorAdapterLoad { .. }
+            | Command::ActorOptimizerRef { .. }
+            | Command::ActorOptimizerDestroy { .. }
+            | Command::ActorOptimizerLoad { .. }
+            | Command::ActorOptimizerSave { .. }
+            | Command::ActorOptimizerInitialize { .. }
+            | Command::ActorOptimizerUpdate { .. } => {}
             Command::ActorGlobalContextRead { response, .. } => {
                 response.send(vec![]).ok();
             }

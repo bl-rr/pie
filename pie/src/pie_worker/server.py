@@ -46,6 +46,7 @@ def poll_ffi_queue(
         "update_adapter": service.update_adapter_rpc,
         "upload_adapter": service.upload_adapter_rpc,
         "download_adapter": service.download_adapter_rpc,
+        "classify_batch": service.classify_batch_rpc,
     }
 
     try:

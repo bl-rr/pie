@@ -63,13 +63,13 @@ async fn main(mut args: Args) -> Result<()> {
         // --- End of burst: time to roll back ---
         if burst_token_ids.len() == roll_back_period {
             // Snapshot the full text *before* rolling back.
-            let snapshot_tokens: Vec<u32> = generated_token_ids
-                .iter()
-                .chain(burst_token_ids.iter())
-                .copied()
-                .collect();
-            let snapshot_text = tokenizer.detokenize(&snapshot_tokens);
-            snapshots.push(snapshot_text);
+            // let snapshot_tokens: Vec<u32> = generated_token_ids
+            //     .iter()
+            //     .chain(burst_token_ids.iter())
+            //     .copied()
+            //     .collect();
+            // let snapshot_text = tokenizer.detokenize(&snapshot_tokens);
+            // snapshots.push(snapshot_text);
 
             let roll_back_amount = roll_back_period / 2;
 

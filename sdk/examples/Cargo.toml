@@ -18,10 +18,16 @@ members = [
     "prefix-caching",
     "prefix-tree",
     "recursion-of-thought",
+    "roll-back",
     "skeleton-of-thought",
     "tree-of-thought",
     "watermarking",
     "windowed-attention",
+    # "text-completion",
+    # "semantic-uncertainty",
+    "semantic-uncertainty-text-completion",
+    "semantic-uncertainty-text-completion-nli",
+    # "chain-of-verification"
 ]
 
 [workspace.dependencies]
@@ -33,3 +39,4 @@ futures = "0.3.31"
 
 [profile.release]
 lto = true
+debug = 1

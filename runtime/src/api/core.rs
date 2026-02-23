@@ -1,3 +1,4 @@
+pub mod classify;
 pub mod forward;
 pub mod kvs;
 pub mod message;

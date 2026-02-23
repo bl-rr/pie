@@ -721,6 +721,7 @@ def _run_ipc_worker_loop(ipc_queue, runtime):
         "update_adapter": runtime.update_adapter_rpc,
         "upload_adapter": runtime.upload_adapter_rpc,
         "download_adapter": runtime.download_adapter_rpc,
+        "classify_batch": runtime.classify_batch_rpc,
     }
 
     shutdown_requested = False

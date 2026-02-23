@@ -1,9 +1,9 @@
 pub mod core;
 pub mod image;
 
+pub mod actor;
 pub mod adapter;
 pub mod zo;
-pub mod actor;
 
 use wasmtime::component::HasSelf;
 
@@ -22,6 +22,7 @@ wasmtime::component::bindgen!({
         "inferlet:core/message/receive-result": core::message::ReceiveResult,
         "inferlet:core/forward/forward-pass": core::forward::ForwardPass,
         "inferlet:core/forward/forward-pass-result": core::forward::ForwardPassResult,
+        "inferlet:core/classify/classification-result": core::classify::ClassificationResult,
         "inferlet:core/tokenize/tokenizer": core::tokenize::Tokenizer,
         "inferlet:actor/common/global-context": actor::GlobalContext,
         "inferlet:actor/common/adapter": actor::Adapter,
@@ -35,6 +36,7 @@ pub fn add_to_linker<T>(linker: &mut wasmtime::component::Linker<T>) -> Result<(
 where
     T: inferlet::core::common::Host
         + inferlet::core::forward::Host
+        + inferlet::core::classify::Host
         + inferlet::core::tokenize::Host
         + inferlet::core::runtime::Host
         + inferlet::core::kvs::Host
@@ -46,6 +48,7 @@ where
 {
     inferlet::core::common::add_to_linker::<T, HasSelf<T>>(linker, |s| s)?;
     inferlet::core::forward::add_to_linker::<T, HasSelf<T>>(linker, |s| s)?;
+    inferlet::core::classify::add_to_linker::<T, HasSelf<T>>(linker, |s| s)?;
     inferlet::core::tokenize::add_to_linker::<T, HasSelf<T>>(linker, |s| s)?;
     inferlet::core::runtime::add_to_linker::<T, HasSelf<T>>(linker, |s| s)?;
     inferlet::core::kvs::add_to_linker::<T, HasSelf<T>>(linker, |s| s)?;

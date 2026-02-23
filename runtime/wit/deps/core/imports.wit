@@ -4,6 +4,7 @@ world imports {
     import common;
     import runtime;
     import forward;
+    import classify;
     import tokenize;
     import kvs;
     import message;

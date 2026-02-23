@@ -15,6 +15,7 @@ pub static INITIALIZE_ADAPTER_ID: u32 = 5;
 pub static UPDATE_ADAPTER_ID: u32 = 6;
 pub static UPLOAD_ADAPTER_ID: u32 = 7;
 pub static DOWNLOAD_ADAPTER_ID: u32 = 8;
+pub static CLASSIFY_BATCH_ID: u32 = 9;
 
 #[derive(Debug)]
 pub enum Request {
@@ -31,6 +32,7 @@ pub enum Request {
     UpdateAdapter(UpdateAdapterRequest),
     UploadAdapter(UploadAdapterRequest),
     DownloadAdapter(DownloadAdapterRequest),
+    ClassifyBatch(ClassifyBatchRequest, oneshot::Sender<ClassifyBatchResponse>),
 }
 
 impl Request {
@@ -69,6 +71,7 @@ impl Request {
             Request::UpdateAdapter(_) => UPDATE_ADAPTER_ID,
             Request::UploadAdapter(_) => UPLOAD_ADAPTER_ID,
             Request::DownloadAdapter(_) => DOWNLOAD_ADAPTER_ID,
+            Request::ClassifyBatch(_, _) => CLASSIFY_BATCH_ID,
         }
     }
 
@@ -83,6 +86,7 @@ impl Request {
             Request::UpdateAdapter(req) => Bytes::from(rmp_serde::to_vec_named(&req)?),
             Request::UploadAdapter(req) => Bytes::from(rmp_serde::to_vec_named(&req)?),
             Request::DownloadAdapter(req) => Bytes::from(rmp_serde::to_vec_named(&req)?),
+            Request::ClassifyBatch(req, _) => Bytes::from(rmp_serde::to_vec_named(&req)?),
         };
         Ok(b)
     }
@@ -146,8 +150,6 @@ pub struct QueryResponse {
     pub value: String,
 }
 
-
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ForwardPassRequest {
     pub input_tokens: Vec<u32>,
@@ -210,6 +212,22 @@ pub struct UploadAdapterRequest {
 pub struct DownloadAdapterRequest {
     pub adapter_ptr: u32,
     pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassifyBatchRequest {
+    pub pairs: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassifyBatchResponse {
+    pub results: Vec<ClassificationOutput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassificationOutput {
+    pub label: String,
+    pub score: f32,
 }
 
 /// Wrapper for Vec<u32> that serializes as raw bytes for zero-copy Python deserialization.
@@ -336,7 +354,9 @@ impl BatchedForwardPassRequest {
 
         // KV cache layout
         self.kv_page_indices.0.extend(&req.kv_page_ptrs);
-        self.kv_page_indptr.0.push(self.kv_page_indices.0.len() as u32);
+        self.kv_page_indptr
+            .0
+            .push(self.kv_page_indices.0.len() as u32);
         self.kv_last_page_lens.0.push(req.kv_page_last_len);
 
         // Query/output indirection
@@ -354,8 +374,12 @@ impl BatchedForwardPassRequest {
         self.adapter_seeds.push(req.adapter_seed);
 
         // Output token indices (flatten with indptr)
-        self.flat_output_token_indices.0.extend(&req.output_token_indices);
-        self.output_token_indptr.0.push(self.flat_output_token_indices.0.len() as u32);
+        self.flat_output_token_indices
+            .0
+            .extend(&req.output_token_indices);
+        self.output_token_indptr
+            .0
+            .push(self.flat_output_token_indices.0.len() as u32);
 
         // Extract sampler parameters (SoA flattening)
         let num_samplers = req.output_token_samplers.len() as u32;
@@ -400,7 +424,8 @@ impl BatchedForwardPassRequest {
 
         // Embed outputs
         self.output_embed_ptrs.push(req.output_embed_ptrs.clone());
-        self.output_embed_indices.push(req.output_embed_indices.clone());
+        self.output_embed_indices
+            .push(req.output_embed_indices.clone());
 
         // Update inference mode hint
         if req.input_tokens.len() > 1 {
