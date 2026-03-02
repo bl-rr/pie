@@ -1,0 +1,9 @@
+package inferlet:exec;
+
+world imports {
+    include inferlet:core/imports;
+    include inferlet:image/imports;
+    include inferlet:adapter/imports;
+    include inferlet:zo/imports;
+    include inferlet:actor/imports;
+}

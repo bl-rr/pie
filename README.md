@@ -1,137 +1,69 @@
-# PIE: A Programmable Serving System for Emerging LLM Applications
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://pie-project.org/img/pie-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://pie-project.org/img/pie-light.svg">
+    <img alt="Pie: Programmable serving system for emerging LLM applications"
+         src="https://pie-project.org/img/pie-light.svg"
+         width="30%">
+    <p></p>
+  </picture>
+</div>
 
-This repository contains the artifact for the SOSP 2025 paper, "PIE: A Programmable Serving System for Emerging LLM Applications."
 
-PIE is a novel serving system for LLMs that enables users to write and deploy *inferlets*—lightweight, user-defined programs that control the LLM inference process from end to end.
+**Pie** is a high-performance, programmable LLM serving system that empowers you to design and deploy custom inference logic and optimization strategies.
 
------
+> **Note** 🧪
+>
+> This software is in a **pre-release** stage and under active development. It's recommended for testing and research purposes only.
 
-## Repository Structure
 
-This artifact is composed of several key components:
 
-* `pie`: The main implementation of PIE's application and control layers.
-* `pie-cli`: A command-line interface for interacting with PIE.
-* `backend`: PIE's inference layer, implemented in Python.
-* `inferlet`: A Rust crate to simplify writing new inferlets.
-* `example-apps`: A collection of example inferlets used in our evaluation.
-* `benchmarks`: Scripts to reproduce the performance benchmarks from the paper.
-* `client`: A Python client library for programmatic interaction with PIE.
+## Getting Started
 
------
+### Installation
 
-## Prerequisites
-
-Before you begin, please ensure your system meets the following requirements:
-
-* **GPU:** NVIDIA GPU (Ampere architecture or newer).
-* **CUDA:** CUDA Toolkit `12.6` or later.
-* **OS:** Linux (Ubuntu 22.04 or later is recommended).
-* **Rust:** [Rust Toolchain](https://www.rust-lang.org/tools/install) `1.80` or later.
-* **Python:** [Python](https://www.python.org/downloads/) `3.11` or later.
-
------
-
-## Installation & Setup
-
-Follow these steps to install all components of the PIE system.
-
-### Step 1: Install Core Python Components (Backend & Client)
-
-The PIE engine relies on a Python-based backend for inference.
-
-1.  **Install PIE Torch Backend:** Follow the instructions in [backend/README.md](./backend/backend-python/README.md) to set up the inference engine.
-2.  **Install PIE Python Client:** Follow the instructions in [client/python/README.md](client/python/README.md) to install the client library.
-
-### Step 2: Install the PIE Command-Line Interface (CLI)
-
-The `pie-cli` is the primary tool for managing the PIE system.
-If you don't have Rust installed, please follow the [Rust installation guide](https://www.rust-lang.org/tools/install).
+**Option 1: PyPI**
 
 ```bash
-cd pie-cli
-cargo install --path .
-cd ..
+pip install "pie-server[cuda]"   # Linux/Windows
+pip install "pie-server[metal]"  # macOS
 ```
 
-Verify the installation by checking the help message:
+**Option 2: Build from Source (Recommended)**
 
 ```bash
-pie --help
+git clone https://github.com/pie-project/pie.git && cd pie/pie
+
+# Recommended: use uv to sync (options: cu126, cu128, cu130, metal)
+uv sync --extra cu128
 ```
 
-### Step 3: Download and Register LLMs
+### Quick Start
 
-Next, download the models used in our examples and benchmarks.
-Download all the models will quite a bit of time and ~30 GB of disk space.
+Run a test prompt (you will be prompted for configuration and model download if this is your first time):
 
 ```bash
-pie model add "llama-3.2-1b-instruct"
-pie model add "llama-3.2-3b-instruct"
-pie model add "llama-3.1-8b-instruct"
+pie run text-completion -- --prompt "Hello world!"
+pie run beam-search -- --prompt "What is the capital of France?" --beam-size 2
 ```
 
-You can list all registered models to confirm they were added correctly:
+> **Note:** The first run may take longer due to JIT compilation.
+> *If built from source, prefix commands with `uv run` (e.g., `uv run pie config init`).*
 
-```bash
-pie model list
-```
 
-### Step 4: Compile Example Inferlets
 
-The example applications must be compiled from Rust into WebAssembly.
 
-1.  **Add the `wasm32-wasip2` target to your Rust toolchain:**
-    ```bash
-    rustup target add wasm32-wasip2
-    ```
-2.  **Compile the inferlets:**
-    ```bash
-    cd example-apps
-    cargo build --target wasm32-wasip2 --release
-    cd ..
-    ```
+Check out the [https://pie-project.org/docs](https://pie-project.org/) for more information.
 
-The compiled `*.wasm` files will be located in the `example-apps/target/wasm32-wasip2/release/` directory.
+## Community
 
------
+**Issues & Bugs**: Please report bugs on [GitHub Issues](https://github.com/pie-project/pie/issues).
 
-## Sanity Check
+**Discussions**: Have a question or feedback? Join us on [GitHub Discussions](https://github.com/pie-project/pie/discussions).
 
-After completing the setup, you can run this simple check to ensure everything is working correctly.
 
-1.  **Start the PIE Engine** Launch the engine with the example configuration file. This will start the backend services and open the interactive PIE shell.
 
-    ```bash
-    cd pie-cli
-    pie start --config example_config.toml
-    ```
 
-    Wait for the confirmation message before proceeding:
+## License
 
-    ```
-    INFO pie::model: Backend service started
-    ```
-
-2.  **Run an Inferlet** From within the PIE shell (`pie>`), run the `text_completion.wasm` inferlet with a sample prompt.
-
-    ```bash
-    pie> run ../example-apps/target/wasm32-wasip2/release/text_completion.wasm -- --prompt "What is the capital of France?" --max-tokens 256
-    ```
-
-    If the setup is correct, you will see the inferlet launch and produce output, similar to this:
-
-    ```
-    ✅ Inferlet launched with ID: 812ad8ac-bbed-4e22-ab13-3dd77c8aa122
-    pie> [Inst 812ad8ac] Output: "The capital of France is Paris." (total elapsed: 60.022073ms)
-    [Inst 812ad8ac] Per token latency: 7.506236ms
-    [Inferlet 812ad8ac-bbed-4e22-ab13-3dd77c8aa122] Terminated. Reason: instance normally finished
-    ```
-
------
-
-## Next Steps: Running the Benchmarks
-
-Now that the system is installed and verified, you can proceed to reproduce the performance results from our paper.
-
-Please visit [`benchmarks/README.md`](benchmarks/README.md) for detailed instructions.
+[Apache License 2.0](LICENSE)

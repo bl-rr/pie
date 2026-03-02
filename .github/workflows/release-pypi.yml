@@ -1,0 +1,216 @@
+name: Release PyPI Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to release'
+        required: true
+        type: choice
+        options:
+          - pie-server (pie/)
+          - pie-client (client/python/)
+          - pie-bakery (sdk/tools/bakery/)
+          - inferlet (sdk/python/)
+      dry_run:
+        description: 'Dry run (build but do not publish)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      package_path: ${{ steps.info.outputs.path }}
+      is_maturin: ${{ steps.info.outputs.is_maturin }}
+    steps:
+      - name: Extract package info
+        id: info
+        run: |
+          case "${{ inputs.package }}" in
+            "pie-server (pie/)")
+              echo "path=pie" >> $GITHUB_OUTPUT
+              echo "is_maturin=true" >> $GITHUB_OUTPUT
+              ;;
+            "pie-client (client/python/)")
+              echo "path=client/python" >> $GITHUB_OUTPUT
+              echo "is_maturin=false" >> $GITHUB_OUTPUT
+              ;;
+            "pie-bakery (sdk/tools/bakery/)")
+              echo "path=sdk/tools/bakery" >> $GITHUB_OUTPUT
+              echo "is_maturin=false" >> $GITHUB_OUTPUT
+              ;;
+            "inferlet (sdk/python/)")
+              echo "path=sdk/python" >> $GITHUB_OUTPUT
+              echo "is_maturin=false" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  # ============================================================================
+  # Maturin builds (pie-server with Rust extension)
+  # ============================================================================
+
+  build-maturin-linux-x86_64:
+    needs: setup
+    if: needs.setup.outputs.is_maturin == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64
+          args: --release --out dist -i python3.9 -i python3.10 -i python3.11 -i python3.12 -i python3.13
+          working-directory: ${{ needs.setup.outputs.package_path }}
+          manylinux: auto
+          before-script-linux: |
+            if command -v yum &> /dev/null; then yum install -y openssl-devel pkgconfig perl-IPC-Cmd; else apt-get update && apt-get install -y libssl-dev pkg-config; fi
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-linux-x86_64
+          path: ${{ needs.setup.outputs.package_path }}/dist
+
+  build-maturin-linux-aarch64:
+    needs: setup
+    if: needs.setup.outputs.is_maturin == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64
+          args: --release --out dist -i python3.9 -i python3.10 -i python3.11 -i python3.12 -i python3.13
+          working-directory: ${{ needs.setup.outputs.package_path }}
+          manylinux: auto
+          before-script-linux: |
+            if command -v yum &> /dev/null; then yum install -y openssl-devel pkgconfig perl-IPC-Cmd; else apt-get update && apt-get install -y libssl-dev pkg-config; fi
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-linux-aarch64
+          path: ${{ needs.setup.outputs.package_path }}/dist
+
+  build-maturin-macos:
+    needs: setup
+    if: needs.setup.outputs.is_maturin == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64-apple-darwin
+          args: --release --out dist
+          working-directory: ${{ needs.setup.outputs.package_path }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-macos-aarch64
+          path: ${{ needs.setup.outputs.package_path }}/dist
+
+  build-maturin-windows:
+    needs: setup
+    if: needs.setup.outputs.is_maturin == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          args: --release --out dist
+          working-directory: ${{ needs.setup.outputs.package_path }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-windows
+          path: ${{ needs.setup.outputs.package_path }}/dist
+
+  build-maturin-sdist:
+    needs: setup
+    if: needs.setup.outputs.is_maturin == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+          working-directory: ${{ needs.setup.outputs.package_path }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-sdist
+          path: ${{ needs.setup.outputs.package_path }}/dist
+
+  # ============================================================================
+  # Pure Python builds
+  # ============================================================================
+
+  build-python:
+    needs: setup
+    if: needs.setup.outputs.is_maturin == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Install build tools
+        run: pip install build
+      - name: Build package
+        run: python -m build ${{ needs.setup.outputs.package_path }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheels-python
+          path: ${{ needs.setup.outputs.package_path }}/dist
+
+  # ============================================================================
+  # Publish
+  # ============================================================================
+
+  publish-maturin:
+    name: Publish to PyPI (maturin)
+    runs-on: ubuntu-latest
+    needs: [setup, build-maturin-linux-x86_64, build-maturin-linux-aarch64, build-maturin-macos, build-maturin-windows, build-maturin-sdist]
+    if: needs.setup.outputs.is_maturin == 'true' && inputs.dry_run == false
+    environment: pypi
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+  publish-python:
+    name: Publish to PyPI (pure Python)
+    runs-on: ubuntu-latest
+    needs: [setup, build-python]
+    if: needs.setup.outputs.is_maturin == 'false' && inputs.dry_run == false
+    environment: pypi
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: wheels-python
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
