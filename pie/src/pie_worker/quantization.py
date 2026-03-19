@@ -2,6 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import torch
 
+from .torchao_compat import import_torchao
+
 # if TYPE_CHECKING:
 #     import torchao
 #     from torchao.quantization import (
@@ -22,7 +24,7 @@ def quantize(
         | "torchao.quantization.Float8WeightOnlyConfig"
     ),
 ) -> torch.Tensor:
-    import torchao
+    torchao = import_torchao()
 
     if isinstance(config, torchao.quantization.Int4WeightOnlyConfig):
         return quantize_int4(x, config)
@@ -40,7 +42,7 @@ def quantize_int4(
     x: torch.Tensor,
     config: "torchao.quantization.Int4WeightOnlyConfig",
 ) -> torch.Tensor:
-    import torchao
+    torchao = import_torchao()
 
     # Essential imports that are too deep or internal to access via top-level easily without being verbose
     # But user asked to use absolute modules.
@@ -103,7 +105,7 @@ def quantize_int8(
     x: torch.Tensor,
     config: "torchao.quantization.Int8WeightOnlyConfig",
 ) -> torch.Tensor:
-    import torchao
+    torchao = import_torchao()
 
     if config.group_size is None:
         group_size = x.shape[-1]
@@ -125,7 +127,7 @@ def quantize_int8(
 def quantize_float8(
     x: torch.Tensor, config: "torchao.quantization.Float8WeightOnlyConfig"
 ) -> torch.Tensor:
-    import torchao
+    torchao = import_torchao()
 
     return torchao.quantization.Float8Tensor.from_hp(
         x,

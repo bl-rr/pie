@@ -1,0 +1,9 @@
+script	status	exit_code
+test_1_agent_react_sglang_0_4_4.py	ok	0
+test_10_skot_sglang_0_4_4.py	ok	0
+test_11_cache_sglang_0_4_4.py	ok	0
+test_12_ebnf_sglang_0_4_4.py	ok	0
+test_13_specdec_sglang_0_4_4.py	ok	0
+test_14_beamsearch_sglang_0_4_4.py	ok	0
+test_15_attnsink_sglang_0_4_4.py	ok	0
+test_16_parallel_generation_sglang_0_4_4.py	ok	0

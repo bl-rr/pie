@@ -1,0 +1,711 @@
+{
+  "freeze_date": "2026-03-02",
+  "backend_versions": {
+    "vllm": {
+      "pinned": "0.6.0",
+      "latest": "0.16.0"
+    },
+    "sglang": {
+      "pinned": "0.4.4",
+      "latest": "0.5.9"
+    }
+  },
+  "summary": {
+    "workloads": 16,
+    "legacy_workloads": 15,
+    "new_example_workloads": 1,
+    "matrix_cells": 64,
+    "implemented_cells": 60,
+    "omitted_cells": 4
+  },
+  "workloads": [
+    {
+      "name": "test_1_agent_react",
+      "type": "legacy",
+      "pie_script": "test_1_agent_react_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_1_agent_react_vllm_0_6_0.py",
+          "target_script": "test_1_agent_react_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_1_agent_react_vllm_0_16_0.py",
+          "target_script": "test_1_agent_react_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_1_agent_react_sglang_0_4_4.py",
+          "target_script": "test_1_agent_react_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_1_agent_react_sglang_0_5_9.py",
+          "target_script": "test_1_agent_react_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_2_agent_codeact",
+      "type": "legacy",
+      "pie_script": "test_2_agent_codeact_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_2_agent_codeact_vllm_0_6_0.py",
+          "target_script": "test_2_agent_codeact_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_2_agent_codeact_vllm_0_16_0.py",
+          "target_script": "test_2_agent_codeact_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_2_agent_codeact_sglang_0_4_4.py",
+          "target_script": "test_2_agent_codeact_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_2_agent_codeact_sglang_0_5_9.py",
+          "target_script": "test_2_agent_codeact_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_3_agent_swarm",
+      "type": "legacy",
+      "pie_script": "test_3_agent_swarm_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_3_agent_swarm_vllm_0_6_0.py",
+          "target_script": "test_3_agent_swarm_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_3_agent_swarm_vllm_0_16_0.py",
+          "target_script": "test_3_agent_swarm_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_3_agent_swarm_sglang_0_4_4.py",
+          "target_script": "test_3_agent_swarm_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_3_agent_swarm_sglang_0_5_9.py",
+          "target_script": "test_3_agent_swarm_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_4_agent_case_study",
+      "type": "legacy",
+      "pie_script": "test_4_agent_case_study_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_4_agent_case_study_vllm_0_6_0.py",
+          "target_script": "test_4_agent_case_study_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_4_agent_case_study_vllm_0_16_0.py",
+          "target_script": "test_4_agent_case_study_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_4_agent_case_study_sglang_0_4_4.py",
+          "target_script": "test_4_agent_case_study_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_4_agent_case_study_sglang_0_5_9.py",
+          "target_script": "test_4_agent_case_study_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_5_text_completion",
+      "type": "legacy",
+      "pie_script": "test_5_text_completion_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_5_text_completion_vllm_0_6_0.py",
+          "target_script": "test_5_text_completion_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_5_text_completion_vllm_0_16_0.py",
+          "target_script": "test_5_text_completion_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_5_text_completion_sglang_0_4_4.py",
+          "target_script": "test_5_text_completion_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_5_text_completion_sglang_0_5_9.py",
+          "target_script": "test_5_text_completion_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_6_prefix_tree",
+      "type": "legacy",
+      "pie_script": "test_6_prefix_tree_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_6_prefix_tree_vllm_0_6_0.py",
+          "target_script": "test_6_prefix_tree_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_6_prefix_tree_vllm_0_16_0.py",
+          "target_script": "test_6_prefix_tree_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_6_prefix_tree_sglang_0_4_4.py",
+          "target_script": "test_6_prefix_tree_sglang.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_6_prefix_tree_sglang_0_5_9.py",
+          "target_script": "test_6_prefix_tree_sglang.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_7_tot",
+      "type": "legacy",
+      "pie_script": "test_7_tot_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_7_tot_vllm_0_6_0.py",
+          "target_script": "test_7_tot_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_7_tot_vllm_0_16_0.py",
+          "target_script": "test_7_tot_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_7_tot_sglang_0_4_4.py",
+          "target_script": "test_7_tot_sglang.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_7_tot_sglang_0_5_9.py",
+          "target_script": "test_7_tot_sglang.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_8_rot",
+      "type": "legacy",
+      "pie_script": "test_8_rot_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_8_rot_vllm_0_6_0.py",
+          "target_script": "test_8_rot_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_8_rot_vllm_0_16_0.py",
+          "target_script": "test_8_rot_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_8_rot_sglang_0_4_4.py",
+          "target_script": "test_8_rot_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_8_rot_sglang_0_5_9.py",
+          "target_script": "test_8_rot_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_9_got",
+      "type": "legacy",
+      "pie_script": "test_9_got_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_9_got_vllm_0_6_0.py",
+          "target_script": "test_9_got_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_9_got_vllm_0_16_0.py",
+          "target_script": "test_9_got_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_9_got_sglang_0_4_4.py",
+          "target_script": "test_9_got_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_9_got_sglang_0_5_9.py",
+          "target_script": "test_9_got_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_10_skot",
+      "type": "legacy",
+      "pie_script": "test_10_skot_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_10_skot_vllm_0_6_0.py",
+          "target_script": "test_10_skot_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_10_skot_vllm_0_16_0.py",
+          "target_script": "test_10_skot_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_10_skot_sglang_0_4_4.py",
+          "target_script": "test_10_skot_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_10_skot_sglang_0_5_9.py",
+          "target_script": "test_10_skot_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_11_cache",
+      "type": "legacy",
+      "pie_script": "test_11_cache_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_11_cache_vllm_0_6_0.py",
+          "target_script": "test_11_cache_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_11_cache_vllm_0_16_0.py",
+          "target_script": "test_11_cache_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_11_cache_sglang_0_4_4.py",
+          "target_script": "test_11_cache_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_11_cache_sglang_0_5_9.py",
+          "target_script": "test_11_cache_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_12_ebnf",
+      "type": "legacy",
+      "pie_script": "test_12_ebnf_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_12_ebnf_vllm_0_6_0.py",
+          "target_script": "test_12_ebnf_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_12_ebnf_vllm_0_16_0.py",
+          "target_script": "test_12_ebnf_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_12_ebnf_sglang_0_4_4.py",
+          "target_script": "test_12_ebnf_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_12_ebnf_sglang_0_5_9.py",
+          "target_script": "test_12_ebnf_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_13_specdec",
+      "type": "legacy",
+      "pie_script": "test_13_specdec_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_13_specdec_vllm_0_6_0.py",
+          "target_script": "test_13_specdec_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_13_specdec_vllm_0_16_0.py",
+          "target_script": "test_13_specdec_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "omitted",
+          "script": "test_13_specdec_sglang_0_4_4.py",
+          "target_script": null,
+          "reason": "No equivalent n-gram speculative decoding API in SGLang OpenAI-compatible server mode."
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "omitted",
+          "script": "test_13_specdec_sglang_0_5_9.py",
+          "target_script": null,
+          "reason": "No equivalent n-gram speculative decoding API in SGLang OpenAI-compatible server mode."
+        }
+      ]
+    },
+    {
+      "name": "test_14_beamsearch",
+      "type": "legacy",
+      "pie_script": "test_14_beamsearch_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_14_beamsearch_vllm_0_6_0.py",
+          "target_script": "test_14_beamsearch_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_14_beamsearch_vllm_0_16_0.py",
+          "target_script": "test_14_beamsearch_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "omitted",
+          "script": "test_14_beamsearch_sglang_0_4_4.py",
+          "target_script": null,
+          "reason": "No tested SGLang endpoint parity for vLLM `use_beam_search` request contract."
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "omitted",
+          "script": "test_14_beamsearch_sglang_0_5_9.py",
+          "target_script": null,
+          "reason": "No tested SGLang endpoint parity for vLLM `use_beam_search` request contract."
+        }
+      ]
+    },
+    {
+      "name": "test_15_attnsink",
+      "type": "legacy",
+      "pie_script": "test_15_attnsink_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_15_attnsink_vllm_0_6_0.py",
+          "target_script": "test_15_attnsink_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_15_attnsink_vllm_0_16_0.py",
+          "target_script": "test_15_attnsink_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_15_attnsink_sglang_0_4_4.py",
+          "target_script": "test_15_attnsink_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_15_attnsink_sglang_0_5_9.py",
+          "target_script": "test_15_attnsink_baseline.py",
+          "reason": null
+        }
+      ]
+    },
+    {
+      "name": "test_16_parallel_generation",
+      "type": "new-example",
+      "pie_script": "test_16_parallel_generation_pie.py",
+      "cells": [
+        {
+          "backend": "vllm",
+          "mode": "pinned",
+          "version": "0.6.0",
+          "status": "implemented",
+          "script": "test_16_parallel_generation_vllm_0_6_0.py",
+          "target_script": "test_16_parallel_generation_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "vllm",
+          "mode": "latest",
+          "version": "0.16.0",
+          "status": "implemented",
+          "script": "test_16_parallel_generation_vllm_0_16_0.py",
+          "target_script": "test_16_parallel_generation_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "pinned",
+          "version": "0.4.4",
+          "status": "implemented",
+          "script": "test_16_parallel_generation_sglang_0_4_4.py",
+          "target_script": "test_16_parallel_generation_baseline.py",
+          "reason": null
+        },
+        {
+          "backend": "sglang",
+          "mode": "latest",
+          "version": "0.5.9",
+          "status": "implemented",
+          "script": "test_16_parallel_generation_sglang_0_5_9.py",
+          "target_script": "test_16_parallel_generation_baseline.py",
+          "reason": null
+        }
+      ]
+    }
+  ]
+}

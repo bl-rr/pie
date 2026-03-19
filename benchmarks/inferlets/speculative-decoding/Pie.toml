@@ -1,0 +1,12 @@
+[package]
+name = "speculative-decoding"
+version = "0.1.0"
+description = "Speculative decoding benchmark inferlet"
+authors = ["Pie Team"]
+
+[runtime]
+core = "^0.2.0"
+
+[parameters]
+prompt = {type = "string", optional = true, description = "Prompt text"}
+max_tokens = {type = "int", optional = true, description = "Maximum number of tokens to generate"}

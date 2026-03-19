@@ -1,6 +1,6 @@
 """Configuration utilities for Pie."""
 
-DEFAULT_MODEL = "Qwen/Qwen3-0.6B"
+DEFAULT_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
 
 
 def get_default_device() -> str:
@@ -62,7 +62,7 @@ max_num_embeds = 128
 # Adapter (LoRA) settings
 max_num_adapters = 32
 max_adapter_rank = 8
-adapter_path = "~/.pie/adapters/"
+adapter_path = "~/.pie-eval/adapters/"
 
 # Memory management
 gpu_mem_utilization = 0.8

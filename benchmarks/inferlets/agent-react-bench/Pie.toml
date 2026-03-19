@@ -1,0 +1,15 @@
+[package]
+name = "agent-react-bench"
+version = "0.1.0"
+description = "Agent case-study benchmark inferlet"
+authors = ["Pie Team"]
+
+[runtime]
+core = "^0.2.0"
+
+[parameters]
+tokens_between_calls = {type = "int", optional = true, description = "Max tokens per thought/action step"}
+function_call_delay = {type = "int", optional = true, description = "Simulated tool delay in ms"}
+use_prefix_cache = {type = "bool", optional = true, description = "Enable prefix cache"}
+drop_tool_cache = {type = "bool", optional = true, description = "Drop first tool cache after use"}
+concurrent_calls = {type = "bool", optional = true, description = "Simulate concurrent calls"}

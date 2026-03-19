@@ -1,0 +1,13 @@
+[package]
+name = "bench-execution-latency"
+version = "0.1.0"
+description = "API call execution latency microbenchmark inferlet"
+authors = ["Pie Team"]
+
+[runtime]
+core = "^0.2.0"
+
+[parameters]
+index = {type = "int", optional = true, description = "Benchmark sample index"}
+layer = {type = "string", optional = true, description = "Layer to benchmark: control|inference"}
+aggregate_size = {type = "int", optional = true, description = "Aggregate N stored samples"}

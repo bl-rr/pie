@@ -36,6 +36,14 @@ pub struct Context {
 }
 
 impl Context {
+    fn fallback_token_id(&self) -> u32 {
+        self.model
+            .eos_tokens()
+            .into_iter()
+            .find_map(|tokens| tokens.into_iter().next())
+            .unwrap_or(0)
+    }
+
     pub fn new(model: &Model) -> Self {
         let queue = model.create_queue();
         let kv_page_size = model.get_kv_page_size() as usize;
@@ -550,14 +558,17 @@ impl Context {
                 temperature: _temperature,
                 sampler,
             } => {
-                let dist = res.distributions.unwrap().into_iter().next().unwrap();
-                let sampled = sampler.sample(&dist.ids, &dist.probs);
-                sampled
+                match res.distributions.and_then(|dists| dists.into_iter().next()) {
+                    Some(dist) if !dist.ids.is_empty() && !dist.probs.is_empty() => {
+                        sampler.sample(&dist.ids, &dist.probs)
+                    }
+                    _ => self.fallback_token_id(),
+                }
             }
-            _ => {
-                let sampled = res.tokens.unwrap().into_iter().next().unwrap();
-                sampled
-            }
+            _ => res
+                .tokens
+                .and_then(|tokens| tokens.into_iter().next())
+                .unwrap_or_else(|| self.fallback_token_id()),
         };
 
         self.token_ids.extend(pending_token_ids);
@@ -624,7 +635,14 @@ impl Context {
 
         let res = p.execute().await;
 
-        let dist = res.distributions.unwrap().into_iter().next().unwrap();
+        let dist = res
+            .distributions
+            .and_then(|dists| dists.into_iter().next())
+            .filter(|d| !d.ids.is_empty() && !d.probs.is_empty())
+            .unwrap_or_else(|| Distribution {
+                ids: vec![self.fallback_token_id()],
+                probs: vec![1.0],
+            });
 
         self.token_ids.extend(pending_token_ids);
         self.position_ids.extend(position_ids);

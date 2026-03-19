@@ -11,11 +11,11 @@ from pathlib import Path
 def get_pie_home() -> Path:
     """Get the Pie CLI home directory.
 
-    Returns PIE_CLI_HOME environment variable if set, otherwise ~/.pie_cli.
+    Returns PIE_CLI_HOME environment variable if set, otherwise ~/.pie-eval.
     """
     if pie_home := os.environ.get("PIE_CLI_HOME"):
         return Path(pie_home)
-    return Path.home() / ".pie"
+    return Path.home() / ".pie-eval"
 
 
 def get_default_config_path() -> Path:

@@ -27,7 +27,7 @@ def resolve_cache_dir(cache_dir: str | None) -> str:
     """Resolve the cache directory using CLI arg > env var > default.
 
     - Windows: Uses %LOCALAPPDATA%/pie
-    - Unix (Linux, macOS, etc.): Uses ~/.cache/pie for Docker compatibility
+    - Unix (Linux, macOS, etc.): Uses ~/.cache/pie-eval for branch isolation
     """
     if cache_dir:
         return cache_dir
@@ -46,15 +46,15 @@ def resolve_cache_dir(cache_dir: str | None) -> str:
             )
         return str(Path(local_appdata) / "pie")
     else:
-        # Unix (Linux, macOS): Use ~/.cache for Docker volume mount compatibility
+        # Unix (Linux, macOS): Use branch-isolated cache directory
         home = Path.home()
-        return str(home / ".cache" / "pie")
+        return str(home / ".cache" / "pie-eval")
 
 
 def resolve_adapter_path(adapter_path: str | None) -> str:
     """Resolve the adapter storage path using CLI arg > env var > default.
 
-    Default path is ~/.pie/adapters/
+    Default path is ~/.pie-eval/adapters/
     """
     if adapter_path:
         return os.path.expanduser(adapter_path)
@@ -62,9 +62,9 @@ def resolve_adapter_path(adapter_path: str | None) -> str:
     if "PIE_ADAPTER_PATH" in os.environ:
         return os.path.expanduser(os.environ["PIE_ADAPTER_PATH"])
 
-    # Default: ~/.pie/adapters/
+    # Default: ~/.pie-eval/adapters/
     home = Path.home()
-    return str(home / ".pie" / "adapters")
+    return str(home / ".pie-eval" / "adapters")
 
 
 def terminate(msg: str) -> None:

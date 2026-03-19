@@ -1,0 +1,11 @@
+[package]
+name = "bench-spawn-time"
+version = "0.1.0"
+description = "Spawn-time microbenchmark inferlet"
+authors = ["Pie Team"]
+
+[runtime]
+core = "^0.2.0"
+
+[parameters]
+message = {type = "string", optional = true, description = "Message to print"}

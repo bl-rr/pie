@@ -13,12 +13,12 @@ class TestGetPieHome:
     """Tests for get_pie_home function."""
 
     def test_default_path(self):
-        """Returns ~/.pie when PIE_HOME is not set."""
+        """Returns ~/.pie-eval when PIE_HOME is not set."""
         with patch.dict(os.environ, {}, clear=True):
             # Remove PIE_HOME if it exists
             os.environ.pop("PIE_HOME", None)
             result = pie_path.get_pie_home()
-            assert result == Path.home() / ".pie"
+            assert result == Path.home() / ".pie-eval"
 
     def test_custom_path_from_env(self, tmp_path):
         """Returns PIE_HOME when set."""
@@ -32,11 +32,11 @@ class TestGetPieCacheHome:
     """Tests for get_pie_cache_home function."""
 
     def test_default_path(self):
-        """Returns ~/.cache/pie when PIE_HOME is not set."""
+        """Returns ~/.cache/pie-eval when PIE_HOME is not set."""
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("PIE_HOME", None)
             result = pie_path.get_pie_cache_home()
-            assert result == Path.home() / ".cache" / "pie"
+            assert result == Path.home() / ".cache" / "pie-eval"
 
     def test_custom_path_from_env(self, tmp_path):
         """Returns PIE_HOME when set."""
@@ -50,22 +50,22 @@ class TestGetDefaultConfigPath:
     """Tests for get_default_config_path function."""
 
     def test_returns_config_toml_in_pie_home(self):
-        """Returns ~/.pie/config.toml."""
+        """Returns ~/.pie-eval/config.toml."""
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("PIE_HOME", None)
             result = pie_path.get_default_config_path()
-            assert result == Path.home() / ".pie" / "config.toml"
+            assert result == Path.home() / ".pie-eval" / "config.toml"
 
 
 class TestGetAuthorizedUsersPath:
     """Tests for get_authorized_users_path function."""
 
     def test_returns_authorized_users_toml_in_pie_home(self):
-        """Returns ~/.pie/authorized_users.toml."""
+        """Returns ~/.pie-eval/authorized_users.toml."""
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("PIE_HOME", None)
             result = pie_path.get_authorized_users_path()
-            assert result == Path.home() / ".pie" / "authorized_users.toml"
+            assert result == Path.home() / ".pie-eval" / "authorized_users.toml"
 
 
 class TestExpandPath:

@@ -14,6 +14,7 @@ from dataclasses import dataclass, asdict
 import torch
 
 from .utils import resolve_cache_dir, resolve_adapter_path
+from .torchao_compat import import_torchao
 
 # Valid weight dtype categories
 FLOAT_DTYPES = {"float32", "float16", "bfloat16", "auto"}
@@ -116,7 +117,7 @@ class RuntimeConfig:
         | None
     ):
         """Derive quantization config from weight_dtype (only for quantization types)."""
-        import torchao
+        torchao = import_torchao()
 
         match self.weight_dtype:
             case "int4":

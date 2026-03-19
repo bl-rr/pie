@@ -1,0 +1,66 @@
+{
+  "backend_key": "vllm_pinned",
+  "framework": "vllm",
+  "version": "0.6.0",
+  "mode": "pinned",
+  "run_name": "20260301-223124__vllm__v0.6.0__gpu2__model-meta-llama_Llama-3.1-8B-Instruct__git-bdd475ee",
+  "started_at": "2026-03-01T22:31:24-05:00",
+  "git_sha": "bdd475ee",
+  "gpu_id": "2",
+  "model_id": "meta-llama/Llama-3.1-8B-Instruct",
+  "pie_server_uri": "ws://127.0.0.1:10009",
+  "openai_host": "http://127.0.0.1",
+  "openai_port": 8000,
+  "scripts": [
+    "test_1_agent_react_vllm_0_6_0.py",
+    "test_10_skot_vllm_0_6_0.py",
+    "test_11_cache_vllm_0_6_0.py",
+    "test_12_ebnf_vllm_0_6_0.py",
+    "test_13_specdec_vllm_0_6_0.py",
+    "test_14_beamsearch_vllm_0_6_0.py",
+    "test_15_attnsink_vllm_0_6_0.py",
+    "test_16_parallel_generation_vllm_0_6_0.py"
+  ],
+  "statuses": [
+    {
+      "script": "test_1_agent_react_vllm_0_6_0.py",
+      "status": "ok",
+      "exit_code": "0"
+    },
+    {
+      "script": "test_10_skot_vllm_0_6_0.py",
+      "status": "ok",
+      "exit_code": "0"
+    },
+    {
+      "script": "test_11_cache_vllm_0_6_0.py",
+      "status": "ok",
+      "exit_code": "0"
+    },
+    {
+      "script": "test_12_ebnf_vllm_0_6_0.py",
+      "status": "ok",
+      "exit_code": "0"
+    },
+    {
+      "script": "test_13_specdec_vllm_0_6_0.py",
+      "status": "ok",
+      "exit_code": "0"
+    },
+    {
+      "script": "test_14_beamsearch_vllm_0_6_0.py",
+      "status": "ok",
+      "exit_code": "0"
+    },
+    {
+      "script": "test_15_attnsink_vllm_0_6_0.py",
+      "status": "ok",
+      "exit_code": "0"
+    },
+    {
+      "script": "test_16_parallel_generation_vllm_0_6_0.py",
+      "status": "ok",
+      "exit_code": "0"
+    }
+  ]
+}

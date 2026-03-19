@@ -209,11 +209,21 @@ async fn main(mut args: Args) -> Result<()> {
 
     // Use join_all to run all generation tasks in parallel.
     let results = future::join_all(generation_futures).await;
+    let elapsed = start.elapsed();
+    let tokenizer = model.get_tokenizer();
+    let total_generated_tokens: usize = results.iter().map(|text| tokenizer.tokenize(text).len()).sum();
+    let per_token_latency_ms = if total_generated_tokens > 0 {
+        (elapsed.as_secs_f64() * 1000.0) / (total_generated_tokens as f64)
+    } else {
+        0.0
+    };
 
     println!(
         "\n--- All 8 generations completed in {:?} ---\n",
-        start.elapsed()
+        elapsed
     );
+    println!("Total Generated Tokens: {}", total_generated_tokens);
+    println!("Per-Token Latency:      {:.4} ms/token", per_token_latency_ms);
 
     // 6. --- Print Results ---
     for (i, output_text) in results.iter().enumerate() {

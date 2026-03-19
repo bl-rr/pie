@@ -277,7 +277,7 @@ class CmaesAdapter(Adapter):
         dtype: torch.dtype,
         gpu_rank: int = 0,
         world_size: int = 1,
-        adapter_path: str = "~/.pie/adapters/",
+        adapter_path: str = "~/.pie-eval/adapters/",
     ):
         super().__init__(adapter_id, rank, alpha, out_features)
 

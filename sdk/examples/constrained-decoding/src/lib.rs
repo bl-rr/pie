@@ -83,10 +83,17 @@ async fn main(mut args: Args) -> Result<()> {
     // This is because we need to add some special prompts for these models to output the JSON
     // directly. See the `ctx.fill` calls below for more details.
     let model_name = model.get_name();
-    if !(model_name.starts_with("llama-3")
-        || model_name.starts_with("qwen-3")
-        || model_name.starts_with("deepseek-r1-distill-qwen-2"))
-    {
+    let model_name_lower = model_name.to_ascii_lowercase();
+    let model_basename = model_name_lower
+        .rsplit('/')
+        .next()
+        .unwrap_or(model_name_lower.as_str());
+    let is_llama3 = model_name_lower.contains("llama-3") || model_basename.contains("llama-3");
+    let is_qwen3 = model_name_lower.contains("qwen-3") || model_basename.contains("qwen-3");
+    let is_deepseek_r1_distill_qwen2 = model_name_lower.contains("deepseek-r1-distill-qwen-2")
+        || model_basename.contains("deepseek-r1-distill-qwen-2");
+
+    if !(is_llama3 || is_qwen3 || is_deepseek_r1_distill_qwen2) {
         return Err(anyhow!(
             "Constrained decoding example is only implemented for Llama 3 and Qwen 3. Got: {}",
             model_name
@@ -96,8 +103,7 @@ async fn main(mut args: Args) -> Result<()> {
     // Determine if we need to escape non-printable characters.
     // For example, Qwen 3 and DeepSeek R1 Distill Qwen 2 models will output "Ġ" for space, while
     // Llama 3 models will output " " for space.
-    let escape_non_printable =
-        model_name.starts_with("qwen-3") || model_name.starts_with("deepseek-r1-distill-qwen-2");
+    let escape_non_printable = is_qwen3 || is_deepseek_r1_distill_qwen2;
 
     // Find the EOS token ID for the model. This is used as a fallback when the grammar constraint
     // is not met. We need to find a single EOS token ID because the sampler outputs a single token
@@ -134,15 +140,15 @@ async fn main(mut args: Args) -> Result<()> {
 
     // Llama 3 models strongly prefer to output two newlines first. We put the newlines here
     // so that the model can output the JSON directly.
-    if model_name.starts_with("llama-3") {
+    if is_llama3 {
         ctx.fill("\n\n");
     // Qwen 3 models are thinking models. We put the <think> and </think> tags here so that
     // the model can output the JSON directly.
-    } else if model_name.starts_with("qwen-3") {
+    } else if is_qwen3 {
         ctx.fill("\n\n<think></think>\n\n");
     // DeepSeek R1 Distill Qwen 2 models are thinking models. We put the </think> tag here so that
     // the model can output the JSON directly.
-    } else if model_name.starts_with("deepseek-r1-distill-qwen-2") {
+    } else if is_deepseek_r1_distill_qwen2 {
         ctx.fill("\n</think>\n\n");
     }
 

@@ -42,9 +42,7 @@ async fn plan_and_generate_parallel(
 
     let stop_condition = stop_condition::max_len(plan_max_tokens)
         .or(stop_condition::ends_with_any(eos_tokens.clone()));
-    let output = plan_ctx
-        .generate(Sampler::top_p(0.6, 0.95), stop_condition)
-        .await;
+    let output = plan_ctx.generate(Sampler::greedy(), stop_condition).await;
 
     // 2. Robustly parse points from the output.
     let points: Vec<String> = output
@@ -75,9 +73,7 @@ async fn plan_and_generate_parallel(
             async move {
                 let stop_condition = stop_condition::max_len(elab_max_tokens)
                     .or(stop_condition::ends_with_any(eos_tokens));
-                elab_ctx
-                    .generate(Sampler::top_p(0.6, 0.95), stop_condition)
-                    .await
+                elab_ctx.generate(Sampler::greedy(), stop_condition).await
             }
         })
         .collect::<Vec<_>>();

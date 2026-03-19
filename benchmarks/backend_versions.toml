@@ -1,0 +1,28 @@
+[meta]
+freeze_date = "2026-03-02"
+model = "meta-llama/Llama-3.1-8B-Instruct"
+notes = "Pinned reproduces legacy eval defaults; latest is frozen at implementation time."
+
+[vllm.pinned]
+version = "0.6.0"
+image = "vllm/vllm-openai:v0.6.0"
+transport = "openai-completions"
+default_port = 8000
+
+[vllm.latest]
+version = "0.16.0"
+image = "vllm/vllm-openai:v0.16.0"
+transport = "openai-completions"
+default_port = 8000
+
+[sglang.pinned]
+version = "0.4.4"
+image = "lmsysorg/sglang:v0.4.4-cu124"
+transport = "openai-completions"
+default_port = 8000
+
+[sglang.latest]
+version = "0.5.9"
+image = "lmsysorg/sglang:v0.5.9"
+transport = "openai-completions"
+default_port = 8000

@@ -102,11 +102,21 @@ async fn main(mut args: Args) -> Result<()> {
         .unwrap_or(512);
 
     let model = inferlet::get_auto_model();
+    let model_name = model.get_name();
+    let model_name_lower = model_name.to_ascii_lowercase();
+    let model_basename = model_name_lower
+        .rsplit('/')
+        .next()
+        .unwrap_or(model_name_lower.as_str());
 
-    if !model.get_name().starts_with("llama-3") {
+    // Accept both normalized runtime names (e.g. "llama-3.1-8b-instruct")
+    // and full HF repo identifiers (e.g. "meta-llama/Llama-3.1-8B-Instruct").
+    let is_llama3 = model_name_lower.contains("llama-3") || model_basename.contains("llama-3");
+    if !is_llama3 {
         return Err(anyhow!(
             "This example works with only non-thinking models. \
-            Please use Llama 3 models."
+            Please use Llama 3 models. Got: {}",
+            model_name
         ));
     }
 

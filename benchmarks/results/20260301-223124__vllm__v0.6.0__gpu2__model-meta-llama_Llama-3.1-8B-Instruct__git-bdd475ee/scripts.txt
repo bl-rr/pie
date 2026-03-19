@@ -1,0 +1,8 @@
+test_1_agent_react_vllm_0_6_0.py
+test_10_skot_vllm_0_6_0.py
+test_11_cache_vllm_0_6_0.py
+test_12_ebnf_vllm_0_6_0.py
+test_13_specdec_vllm_0_6_0.py
+test_14_beamsearch_vllm_0_6_0.py
+test_15_attnsink_vllm_0_6_0.py
+test_16_parallel_generation_vllm_0_6_0.py
