@@ -18,6 +18,12 @@ There are two main ways to run benchmarks:
 
 If you use [`run_eval_matrix.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_eval_matrix.sh), you do not need to start PIE manually.
 
+Most common entry points:
+
+- PIE-only batch run: `./run_eval_matrix.sh --backends "pie"`
+- full matrix run: `./run_eval_matrix.sh`
+- direct/manual PIE run: start [`run_pie.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_pie.sh), then run `python test_*_pie.py`
+
 ## Workloads
 
 Legacy PIE entrypoints preserved as stable script names:
@@ -105,6 +111,33 @@ That helper builds:
 - `std/text-completion`
 - `std/beam-search`
 - `benchmarks/inferlets`
+
+## Quick Start
+
+PIE-only batch run:
+
+```bash
+./run_eval_matrix.sh --backends "pie"
+```
+
+PIE-only batch run with dedicated output directory:
+
+```bash
+./run_eval_matrix.sh --backends "pie" --results-root results/pie_only
+```
+
+Full matrix run:
+
+```bash
+./run_eval_matrix.sh
+```
+
+Direct/manual PIE run:
+
+```bash
+./run_pie.sh
+python test_5_text_completion_pie.py --server-uri ws://127.0.0.1:10009
+```
 
 ## Direct PIE Runs
 
@@ -238,9 +271,10 @@ The runner chooses backend launchers automatically:
 - `sglang_pinned` -> [`run_sglang_pinned.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_sglang_pinned.sh)
 - `sglang_latest` -> [`run_sglang_latest.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_sglang_latest.sh)
 
-## PIE-Only Runs
+## PIE-Only Matrix Runs
 
 This is the recommended way to run the full PIE suite without any baseline backends.
+This section is specifically about the batch runner path. In this mode, [`run_eval_matrix.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_eval_matrix.sh) starts PIE automatically, runs the selected PIE workloads, writes isolated results, and tears PIE down afterward.
 
 Run all PIE workloads:
 
