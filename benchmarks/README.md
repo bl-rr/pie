@@ -1,12 +1,27 @@
 # Benchmark Instructions
 
-All commands below assume your current directory is `benchmarks/`.
+All commands below assume your current directory is [`benchmarks/`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks).
 
-## Scope
+## Overview
 
-This benchmark tree preserves the legacy SOSP'25 evaluation entrypoints and adds versioned baseline variants.
+This directory preserves the legacy SOSP'25 evaluation entrypoints and adds:
 
-Legacy PIE entrypoints (unchanged):
+- exact-version vLLM and SGLang wrappers
+- pinned and frozen-latest backend launchers
+- a batch runner that starts backends automatically and writes isolated result directories
+- coverage and summary artifacts for the benchmark matrix
+
+There are two main ways to run benchmarks:
+
+- direct/manual runs: you start the backend yourself, then run one benchmark script
+- matrix runs: [`run_eval_matrix.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_eval_matrix.sh) starts backends for you and runs a full suite
+
+If you use [`run_eval_matrix.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_eval_matrix.sh), you do not need to start PIE manually.
+
+## Workloads
+
+Legacy PIE entrypoints preserved as stable script names:
+
 - `test_1_agent_react_pie.py`
 - `test_2_agent_codeact_pie.py`
 - `test_3_agent_swarm_pie.py`
@@ -25,162 +40,359 @@ Legacy PIE entrypoints (unchanged):
 - `microbench_spawn_time.py`
 - `microbench_execution_latency.py`
 
-New benchmarkable `sdk/examples` workload added:
+Additional benchmarkable workload added from current `sdk/examples`:
+
 - `test_16_parallel_generation_pie.py`
+
+Compatibility baseline entrypoints preserved:
+
+- `*_baseline.py` defaults to pinned vLLM behavior
+- legacy `*_sglang.py` compatibility wrappers remain where they previously existed
+
+Exact-version baseline entrypoints exist per backend, for example:
+
+- `test_1_agent_react_vllm_0_6_0.py`
+- `test_1_agent_react_vllm_0_16_0.py`
+- `test_12_ebnf_sglang_0_4_4.py`
+- `test_12_ebnf_sglang_0_5_9.py`
+
+Additional exact-version variants also exist for special cases that should be benchmarked separately. For example, prefix-tree includes extra vLLM variants such as `warmup` and `staged`. The matrix runner auto-discovers both:
+
+- `test_*_<backend>_<version>.py`
+- `test_*_<backend>_*_<version>.py`
 
 ## Backend Version Freeze
 
-Frozen on: `2026-03-02`.
+Frozen on: `2026-03-02`
 
 | Backend | Pinned | Frozen Latest |
 | --- | --- | --- |
 | vLLM | `0.6.0` (`vllm/vllm-openai:v0.6.0`) | `0.16.0` (`vllm/vllm-openai:v0.16.0`) |
 | SGLang | `0.4.4` (`lmsysorg/sglang:v0.4.4-cu124`) | `0.5.9` (`lmsysorg/sglang:v0.5.9`) |
 
-Full matrix status is tracked in:
-- `coverage_report.json`
-- `coverage_report.md`
+Source of truth: [`backend_versions.toml`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/backend_versions.toml)
 
-## Environment Setup
+Matrix coverage status:
 
-1. Install Python dependencies:
+- [`coverage_report.json`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/coverage_report.json)
+- [`coverage_report.md`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/coverage_report.md)
+
+## Prerequisites
+
+You need:
+
+- Python with the dependencies in [`requirements.txt`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/requirements.txt)
+- Rust + `wasm32-wasip2` target for inferlet builds
+- `uv` for PIE local runs
+- Docker access for vLLM and SGLang launchers
+- model weights available in Hugging Face cache
+
+Install Python dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Build inferlets used by this benchmark suite:
+Build all inferlets used by this benchmark tree:
+
 ```bash
-# sdk/examples workloads
-cd ../sdk/examples
-cargo build --target wasm32-wasip2 --release
-
-# std workloads used by benchmarks
-echo "building std/text-completion"
-cd ../std/text-completion
-cargo build --target wasm32-wasip2 --release
-
-echo "building std/beam-search"
-cd ../beam-search
-cargo build --target wasm32-wasip2 --release
-
-# legacy eval-specific inferlets
-cd ../../benchmarks/inferlets
-cargo build --target wasm32-wasip2 --release
-
-cd ..
+./build_inferlets.sh
 ```
 
-3. Start PIE in another terminal, then run any `*_pie.py` script.
+That helper builds:
+
+- `sdk/examples`
+- `std/text-completion`
+- `std/beam-search`
+- `benchmarks/inferlets`
+
+## Direct PIE Runs
+
+Use this mode when you want to run PIE only, or when you want tight control over one workload at a time.
+
+Start PIE:
+
 ```bash
-# Auto-updates ~/.pie-eval/config.toml model/device and starts PIE.
-# Defaults: MODEL_ID=meta-llama/Llama-3.1-8B-Instruct
-#           GPU_ID=2  (sets device=cuda:2 for PIE model section)
 ./run_pie.sh
 ```
 
-4. Start baseline servers as needed:
+What [`run_pie.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_pie.sh) does:
+
+- uses `PIE_HOME=${HOME}/.pie-eval` by default
+- initializes `~/.pie-eval/config.toml` if missing
+- rewrites the configured model/device before launch
+- runs `uv run --project ../pie pie serve --config ~/.pie-eval/config.toml`
+
+Default launcher environment:
+
+- `MODEL_ID=meta-llama/Llama-3.1-8B-Instruct`
+- `GPU_ID=2`
+- `PIE_HOME=$HOME/.pie-eval`
+- `PIE_CONFIG_PATH=$PIE_HOME/config.toml`
+
+Run a legacy PIE workload manually:
+
 ```bash
-# compatibility aliases (pinned)
-./run_vllm.sh
-./run_sglang.sh
-
-# explicit version scripts
-./run_vllm_pinned.sh
-./run_vllm_latest.sh
-./run_sglang_pinned.sh
-./run_sglang_latest.sh
-
-# Optional overrides for all backend launchers:
-#   GPU_ID=<gpu-index>   (default: 2)
-#   MODEL_ID=<hf-model>  (default: meta-llama/Llama-3.1-8B-Instruct)
-
-# Note: vLLM/SGLang launch scripts use Docker. Your user must have access to
-# /var/run/docker.sock (or equivalent Docker daemon privileges).
+python test_1_agent_react_pie.py --server-uri ws://127.0.0.1:10009
+python test_6_prefix_tree_pie.py --server-uri ws://127.0.0.1:10009
+python test_16_parallel_generation_pie.py --server-uri ws://127.0.0.1:10009
 ```
 
-## Batch Run Orchestration
+Run a PIE workload with a smaller load:
 
-Use one command to run full suites and auto-separate results by backend run:
+```bash
+python test_1_agent_react_pie.py --server-uri ws://127.0.0.1:10009 --num-instances 1
+python test_3_agent_swarm_pie.py --server-uri ws://127.0.0.1:10009 --num-pipelines 1
+```
+
+## Direct Baseline Runs
+
+Use this mode when you want one baseline backend running in another terminal and then invoke scripts by hand.
+
+Start vLLM pinned:
+
+```bash
+./run_vllm_pinned.sh
+```
+
+Start vLLM latest:
+
+```bash
+./run_vllm_latest.sh
+```
+
+Start SGLang pinned:
+
+```bash
+./run_sglang_pinned.sh
+```
+
+Start SGLang latest:
+
+```bash
+./run_sglang_latest.sh
+```
+
+Compatibility aliases:
+
+```bash
+./run_vllm.sh
+./run_sglang.sh
+```
+
+All baseline launchers accept:
+
+- `GPU_ID=<gpu-index>`
+- `MODEL_ID=<hf-model>`
+- `DOCKER_CMD="docker"` or `DOCKER_CMD="sudo docker"`
+
+Examples:
+
+```bash
+GPU_ID=2 MODEL_ID=meta-llama/Llama-3.1-8B-Instruct ./run_vllm_latest.sh
+GPU_ID=2 MODEL_ID=meta-llama/Llama-3.1-8B-Instruct ./run_sglang_pinned.sh
+```
+
+Then run exact-version scripts directly:
+
+```bash
+python test_1_agent_react_vllm_0_6_0.py --host http://127.0.0.1 --port 8000
+python test_6_prefix_tree_vllm_0_16_0.py --host http://127.0.0.1 --port 8000
+python test_6_prefix_tree_vllm_warmup_0_16_0.py --host http://127.0.0.1 --port 8000
+python test_12_ebnf_sglang_0_5_9.py --host http://127.0.0.1 --port 8000
+```
+
+## Matrix Runs
+
+Use [`run_eval_matrix.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_eval_matrix.sh) when you want the runner to manage backend startup, readiness checks, sequential execution, cleanup, and result summaries.
+
+Default command:
 
 ```bash
 ./run_eval_matrix.sh
 ```
 
 Default backends:
+
 - `pie`
 - `vllm_pinned`
 - `vllm_latest`
 - `sglang_pinned`
 - `sglang_latest`
 
-Execution behavior:
-- Sequential only (one backend at a time).
-- Explicit backend cleanup is performed before starting the next backend.
-- A single `GPU_ID` value is applied to all backends in that run.
-- PIE runs use `safe` load profile by default to reduce OOM risk on single-GPU 8B setups.
-  This profile lowers per-script concurrency for PIE workloads only.
-  Use `--pie-load-profile legacy` to run original script defaults.
-- `--pie-load-profile safe-3.1-8b` uses a calibrated per-workload request map for
-  Llama-3.1-8B and applies the same per-workload outer request/worker counts to
-  vLLM/SGLang wrappers for comparability.
-- With `safe-3.1-8b`, PIE backend restart-between-scripts is enabled by default
-  (`--pie-restart-between-scripts`) to reduce cross-script OOM drift.
-- If a Docker backend cannot start (e.g., no docker.sock permission), it is skipped by default
-  and marked `unsupported` in `script_status.tsv`/summary.
-  The runner also auto-tries `sudo docker` (non-interactive) when `DOCKER_CMD=docker`
-  cannot access the daemon.
-  Use `--strict-backends` to fail immediately instead.
+Important behavior:
 
-Each backend run creates a directory under `benchmarks/results/` with this naming shape:
-- `<timestamp>__<framework>[__v<version>]__gpu<id>__model-<model>__git-<sha>`
+- execution is sequential, one backend at a time
+- the runner cleans up the previous backend before starting the next one
+- PIE is started automatically if `pie` is included in `--backends`
+- vLLM and SGLang are started in Docker
+- all backends in the batch use the same `GPU_ID`
+- the default PIE load profile is `safe`
+- unavailable Docker backends are skipped and marked `unsupported` unless `--strict-backends` is used
+
+The runner chooses backend launchers automatically:
+
+- `pie` -> [`run_pie.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_pie.sh)
+- `vllm_pinned` -> [`run_vllm_pinned.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_vllm_pinned.sh)
+- `vllm_latest` -> [`run_vllm_latest.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_vllm_latest.sh)
+- `sglang_pinned` -> [`run_sglang_pinned.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_sglang_pinned.sh)
+- `sglang_latest` -> [`run_sglang_latest.sh`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/run_sglang_latest.sh)
+
+## PIE-Only Runs
+
+This is the recommended way to run the full PIE suite without any baseline backends.
+
+Run all PIE workloads:
+
+```bash
+./run_eval_matrix.sh --backends "pie"
+```
+
+Run PIE only into a dedicated results tree:
+
+```bash
+./run_eval_matrix.sh --backends "pie" --results-root results/pie_only
+```
+
+Run one PIE workload only:
+
+```bash
+./run_eval_matrix.sh --backends "pie" --filter test_6_prefix_tree
+```
+
+Run PIE only with legacy script-default load:
+
+```bash
+./run_eval_matrix.sh --backends "pie" --pie-load-profile legacy
+```
+
+Run PIE only with the calibrated `safe-3.1-8b` map:
+
+```bash
+./run_eval_matrix.sh --backends "pie" --pie-load-profile safe-3.1-8b
+```
+
+Run PIE only with everything forced to one outer request/instance:
+
+```bash
+./run_eval_matrix.sh --backends "pie" --single-instance
+```
+
+In PIE-only matrix mode, do not manually start PIE first. The runner launches and tears it down itself.
+
+## Common Matrix Options
 
 Examples:
-- `20260301-233455__pie__gpu2__model-meta-llama_Llama-3.1-8B-Instruct__git-a1b2c3d`
-- `20260301-235012__vllm__v0.6.0__gpu2__model-meta-llama_Llama-3.1-8B-Instruct__git-a1b2c3d`
 
-Inside each run directory:
-- `logs/` benchmark JSON logs (isolated for this run)
-- `script_stdout/` stdout/stderr per benchmark script
-- `backend_stdout.log` backend server output
-- `script_status.tsv` per-script status (`ok`, `unsupported`, `failed`)
-- `manifest.json` run metadata
-
-After the matrix finishes, summary files are written at the results root:
-- `run_summary_<batch-id>.md`
-- `run_summary_latest.md` (updated pointer to the latest batch)
-- includes per-script parsed benchmark output/metrics attributed to each backend run
-
-Common options:
 ```bash
 ./run_eval_matrix.sh --backends "pie vllm_latest sglang_latest"
 ./run_eval_matrix.sh --gpu-id 2 --model-id meta-llama/Llama-3.1-8B-Instruct
+./run_eval_matrix.sh --results-root ../result1
 ./run_eval_matrix.sh --filter test_4
 ./run_eval_matrix.sh --no-microbench
+./run_eval_matrix.sh --single-instance
 ./run_eval_matrix.sh --pie-load-profile legacy
 ./run_eval_matrix.sh --pie-load-profile safe-3.1-8b
+./run_eval_matrix.sh --pie-restart-between-scripts
 ./run_eval_matrix.sh --no-pie-restart-between-scripts
 ./run_eval_matrix.sh --script-timeout 1800
 ./run_eval_matrix.sh --strict-backends
 ./run_eval_matrix.sh --dry-run
 ```
 
-Useful env override:
-- `DOCKER_CMD="docker"` (default)
-- `DOCKER_CMD="sudo docker"` (if your environment uses sudo for Docker)
+Most important knobs:
 
-Recalibrating `safe-3.1-8b` map (binary search from legacy defaults):
+- `--backends "<list>"`: space-separated backend keys
+- `--gpu-id <id>`: single GPU used by all backends in that run
+- `--model-id <hf_repo>`: model passed to launchers and baseline scripts
+- `--results-root <dir>`: output root; may be relative or absolute
+- `--filter <substr>`: substring match on script filename
+- `--no-microbench`: skip PIE microbench scripts
+- `--single-instance`: force all outer concurrency/request counts to `1`
+- `--pie-load-profile <safe|safe-3.1-8b|legacy>`
+- `--script-timeout <sec>`: per-script timeout; `0` disables
+- `--dry-run`: print the planned backend/script commands without executing them
+
+Useful environment variables:
+
+- `DOCKER_CMD`
+- `PIE_SCRIPT_ARGS`
+- `BASELINE_SCRIPT_ARGS`
+- `SAFE_31_8B_CONCURRENCY`
+- `SINGLE_INSTANCE=1`
+
+## Load Profiles
+
+`safe`:
+
+- default mode
+- reduces PIE concurrency on riskier workloads
+- leaves baseline scripts at their own defaults
+
+`safe-3.1-8b`:
+
+- calibrated for `meta-llama/Llama-3.1-8B-Instruct`
+- uses a per-workload map for PIE concurrency
+- applies comparable outer request/worker counts to baseline wrappers
+- enables PIE restart-between-scripts by default when `PIE_RESTART_BETWEEN_SCRIPTS=auto`
+
+`legacy`:
+
+- preserves the benchmark scripts' original default arguments
+- no runner-imposed PIE concurrency shaping
+
+Recalibrate the `safe-3.1-8b` map:
+
 ```bash
 python3 -u calibrate_safe_31_8b.py --timeout 0 --poll-interval 10 \
   --output safe_31_8b_calibration_main16.json --scripts $(ls test_*_pie.py | sort -V)
 ```
-Notes:
-- The calibrator halves on failure, then binary-refines to the largest passing value.
-- It polls backend logs every 10s for OOM signals and restarts PIE before the next probe.
-- Per-attempt timeout defaults to `0` (disabled), so probes run until completion unless you pass `--timeout`.
 
-## Legacy Commands (Unchanged)
+Calibration behavior:
 
-Use the same commands as before:
+- starts from legacy defaults
+- halves on failure
+- binary-refines to the largest passing value
+- polls backend logs every 10s for OOM signals
+- restarts PIE between attempts
+
+## Results Layout
+
+Each backend run creates one directory under the chosen results root:
+
+- `<timestamp>__<framework>[__v<version>]__gpu<id>__model-<model>__git-<sha>`
+
+Examples:
+
+- `20260301-233455__pie__gpu2__model-meta-llama_Llama-3.1-8B-Instruct__git-a1b2c3d`
+- `20260301-235012__vllm__v0.6.0__gpu2__model-meta-llama_Llama-3.1-8B-Instruct__git-a1b2c3d`
+
+Inside each run directory:
+
+- `backend_stdout.log`
+- `script_stdout/`
+- `logs/`
+- `script_status.tsv`
+- `scripts.txt`
+- `manifest.json`
+
+At the results root, the batch runner also writes:
+
+- `last_runs.txt`
+- `run_summary_<batch-id>.md`
+- `run_summary_latest.md`
+
+The generated summary parses and reports, when present in script stdout:
+
+- total time
+- throughput
+- generated tokens
+- per-token latency
+- microbenchmark mean/median/stdev latency
+
+## Legacy Manual Commands
+
+These direct entrypoints remain runnable:
 
 ```bash
 python test_1_agent_react_pie.py
@@ -198,39 +410,26 @@ python test_12_ebnf_pie.py
 python test_13_specdec_pie.py
 python test_14_beamsearch_pie.py
 python test_15_attnsink_pie.py
+python test_16_parallel_generation_pie.py
 python microbench_spawn_time.py
 python microbench_execution_latency.py
 ```
 
-Compatibility baseline entrypoints are preserved:
-- `*_baseline.py` defaults to pinned vLLM behavior.
-- existing `*_sglang.py` scripts remain runnable (`test_6_prefix_tree_sglang.py`, `test_7_tot_sglang.py`).
-
-## Versioned Baseline Entrypoints
-
-For each workload, wrappers are generated as exact versions only:
-- `<workload>_vllm_<exactver>.py`
-- `<workload>_sglang_<exactver>.py`
-
-Examples:
-```bash
-python test_1_agent_react_vllm_0_6_0.py
-python test_1_agent_react_vllm_0_16_0.py
-python test_12_ebnf_sglang_0_5_9.py
-python test_16_parallel_generation_sglang_0_4_4.py
-```
+When you run them manually, you are responsible for starting the backend yourself.
 
 ## Omitted Cells
 
-The following cells are intentionally omitted and return an explicit unsupported message:
-- `test_13_specdec` on SGLang (pinned/latest): no equivalent n-gram speculative decoding endpoint contract.
-- `test_14_beamsearch` on SGLang (pinned/latest): no validated parity for vLLM `use_beam_search` request contract.
+The following backend/workload cells are intentionally omitted and return explicit unsupported output:
 
-See `coverage_report.md` for the complete matrix.
+- `test_13_specdec` on SGLang pinned/latest
+- `test_14_beamsearch` on SGLang pinned/latest
+
+See [`coverage_report.md`](/home/leo/pie26-eval/pie-sosp-eval-update/benchmarks/coverage_report.md) for the full matrix and rationale.
 
 ## Microbenchmark Helpers
 
-Automation scripts remain available:
+Helper scripts remain available:
+
 ```bash
 ./microbench_spawn_time.sh
 python microbench_spawn_time_viz.py
