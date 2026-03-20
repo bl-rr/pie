@@ -26,6 +26,7 @@ PIE_RESTART_BETWEEN_SCRIPTS="${PIE_RESTART_BETWEEN_SCRIPTS:-auto}"
 SCRIPT_TIMEOUT="${SCRIPT_TIMEOUT:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 SINGLE_INSTANCE="${SINGLE_INSTANCE:-0}"
+SINGLE_REQUEST="${SINGLE_REQUEST:-0}"
 BATCH_STARTED_AT="$(date -Iseconds)"
 
 usage() {
@@ -48,7 +49,8 @@ Options:
   --startup-timeout <sec>   Seconds to wait for backend readiness (default: 600)
   --filter <substr>         Only run benchmark scripts containing this substring
   --no-microbench           Skip PIE microbench scripts
-  --single-instance         Force all benchmark concurrency/request knobs to 1
+  --single-instance         Force concurrency/worker knobs to 1
+  --single-request          Force total request/instance knobs to 1
   --pie-load-profile <mode> PIE load profile: safe|safe-3.1-8b|legacy (default: safe)
   --pie-restart-between-scripts
                             Restart PIE backend between PIE scripts
@@ -69,6 +71,7 @@ Extra benchmark args:
   BASELINE_SCRIPT_ARGS="<args>"   appended to every baseline wrapper call
   SAFE_31_8B_CONCURRENCY=<n>      Fallback value for unmapped scripts in safe-3.1-8b profile
   SINGLE_INSTANCE=1               Equivalent to --single-instance
+  SINGLE_REQUEST=1                Equivalent to --single-request
   DOCKER_CMD="<cmd>"              Docker command, e.g. "docker" or "sudo docker"
 
 Examples:
@@ -124,6 +127,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --single-instance)
             SINGLE_INSTANCE="1"
+            shift
+            ;;
+        --single-request)
+            SINGLE_REQUEST="1"
             shift
             ;;
         --pie-load-profile)
@@ -216,6 +223,11 @@ fi
 
 if ! [[ "${SINGLE_INSTANCE}" =~ ^[01]$ ]]; then
     echo "[run_eval_matrix] ERROR: Invalid SINGLE_INSTANCE: ${SINGLE_INSTANCE}. Use 0 or 1." >&2
+    exit 1
+fi
+
+if ! [[ "${SINGLE_REQUEST}" =~ ^[01]$ ]]; then
+    echo "[run_eval_matrix] ERROR: Invalid SINGLE_REQUEST: ${SINGLE_REQUEST}. Use 0 or 1." >&2
     exit 1
 fi
 
@@ -698,7 +710,7 @@ check_pie_engine_ready_once() {
 pie_profile_args_for_script() {
     local script="$1"
 
-    if [[ "${SINGLE_INSTANCE}" == "1" ]]; then
+    if [[ "${SINGLE_INSTANCE}" == "1" || "${SINGLE_REQUEST}" == "1" ]]; then
         case "${script}" in
             test_3_agent_swarm_pie.py)
                 printf '%s\n' "--num-pipelines" "1"
@@ -775,17 +787,29 @@ safe_31_8b_value_for_script() {
 baseline_profile_args_for_script() {
     local script="$1"
 
-    if [[ "${SINGLE_INSTANCE}" == "1" ]]; then
+    if [[ "${SINGLE_REQUEST}" == "1" ]]; then
         case "${script}" in
             test_3_agent_swarm_*.py)
                 printf '%s\n' "--num-pipelines" "1"
-                printf '%s\n' "--num-max-workers" "1"
                 ;;
             test_*_vllm_*.py|test_*_sglang_*.py|test_*_baseline.py)
                 printf '%s\n' "--num-requests" "1"
+                ;;
+        esac
+    fi
+
+    if [[ "${SINGLE_INSTANCE}" == "1" ]]; then
+        case "${script}" in
+            test_3_agent_swarm_*.py)
+                printf '%s\n' "--num-max-workers" "1"
+                ;;
+            test_*_vllm_*.py|test_*_sglang_*.py|test_*_baseline.py)
                 printf '%s\n' "--num-max-workers" "1"
                 ;;
         esac
+    fi
+
+    if [[ "${SINGLE_INSTANCE}" == "1" || "${SINGLE_REQUEST}" == "1" ]]; then
         return 0
     fi
 
@@ -1189,7 +1213,10 @@ run_one_backend() {
     log "Scripts: ${#scripts[@]}"
     log "GPU assignment for this backend: cuda:${GPU_ID}"
     if [[ "${SINGLE_INSTANCE}" == "1" ]]; then
-        log "Single-instance mode: enabled (all script concurrency forced to 1)"
+        log "Single-instance mode: enabled (worker/concurrency knobs forced to 1)"
+    fi
+    if [[ "${SINGLE_REQUEST}" == "1" ]]; then
+        log "Single-request mode: enabled (total request/instance knobs forced to 1)"
     fi
     if [[ "${framework}" == "pie" ]]; then
         log "PIE load profile: ${PIE_LOAD_PROFILE}"
@@ -1340,7 +1367,10 @@ log "GPU: ${GPU_ID}"
 log "Backend execution mode: sequential (cleanup between backends enabled)"
 log "Docker command: ${DOCKER_CMD}"
 if [[ "${SINGLE_INSTANCE}" == "1" ]]; then
-    log "Single-instance mode: enabled (all script concurrency forced to 1)"
+    log "Single-instance mode: enabled (worker/concurrency knobs forced to 1)"
+fi
+if [[ "${SINGLE_REQUEST}" == "1" ]]; then
+    log "Single-request mode: enabled (total request/instance knobs forced to 1)"
 fi
 if [[ "${SKIP_UNAVAILABLE_BACKENDS}" == "1" ]]; then
     log "Unavailable backends: skip and mark unsupported"

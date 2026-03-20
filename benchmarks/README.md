@@ -278,7 +278,14 @@ Run PIE only with everything forced to one outer request/instance:
 ./run_eval_matrix.sh --backends "pie" --single-instance
 ```
 
+Run PIE only with one total outer request/instance:
+
+```bash
+./run_eval_matrix.sh --backends "pie" --single-request
+```
+
 In PIE-only matrix mode, do not manually start PIE first. The runner launches and tears it down itself.
+For most PIE scripts, `--single-instance` and `--single-request` are effectively the same because the script only exposes one outer count such as `--num-instances` or `--num-pipelines`.
 
 ## Common Matrix Options
 
@@ -291,6 +298,7 @@ Examples:
 ./run_eval_matrix.sh --filter test_4
 ./run_eval_matrix.sh --no-microbench
 ./run_eval_matrix.sh --single-instance
+./run_eval_matrix.sh --single-request
 ./run_eval_matrix.sh --pie-load-profile legacy
 ./run_eval_matrix.sh --pie-load-profile safe-3.1-8b
 ./run_eval_matrix.sh --pie-restart-between-scripts
@@ -308,7 +316,8 @@ Most important knobs:
 - `--results-root <dir>`: output root; may be relative or absolute
 - `--filter <substr>`: substring match on script filename
 - `--no-microbench`: skip PIE microbench scripts
-- `--single-instance`: force all outer concurrency/request counts to `1`
+- `--single-instance`: force worker/concurrency knobs to `1`
+- `--single-request`: force total request/instance knobs to `1`
 - `--pie-load-profile <safe|safe-3.1-8b|legacy>`
 - `--script-timeout <sec>`: per-script timeout; `0` disables
 - `--dry-run`: print the planned backend/script commands without executing them
@@ -320,6 +329,13 @@ Useful environment variables:
 - `BASELINE_SCRIPT_ARGS`
 - `SAFE_31_8B_CONCURRENCY`
 - `SINGLE_INSTANCE=1`
+- `SINGLE_REQUEST=1`
+
+Behavioral distinction:
+
+- On baseline scripts, `--single-instance` limits worker concurrency, for example `--num-max-workers 1`, while leaving total request count unchanged.
+- On baseline scripts, `--single-request` forces the total outer request count to `1`, for example `--num-requests 1` or `--num-pipelines 1`.
+- On PIE scripts, both flags usually collapse to the same behavior because the legacy PIE entrypoints expose one outer count rather than separate total-request and worker knobs.
 
 ## Load Profiles
 
