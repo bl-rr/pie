@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+use syn::{ItemFn, parse_macro_input};
 
 /// Reads the package name from Pie.toml.
 fn read_package_name() -> Result<String, String> {

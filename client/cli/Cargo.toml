@@ -11,6 +11,10 @@ repository = "https://github.com/pie-project/pie"
 name = "pie-submit"
 path = "src/main.rs"
 
+[[bin]]
+name = "pie-submit-bench"
+path = "src/bin/pie_submit_bench.rs"
+
 [dependencies]
 pie-client = { version = "0.2.0", path = "../rust" }
 tokio = { version = "1.38", features = ["full"] }

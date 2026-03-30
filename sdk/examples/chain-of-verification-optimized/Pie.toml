@@ -1,0 +1,17 @@
+[package]
+name = "chain-of-verification-optimized"
+version = "0.1.0"
+description = "Optimized Chain-of-Verification inferlet with paper-faithful factored verification and legacy optimized fallbacks"
+authors = ["Pie Team"]
+
+[runtime]
+core = "^0.2.0"
+mcp = "^0.2.0"
+
+[parameters]
+config = {type = "string", optional = true, description = "Path to the CoVe TOML config file"}
+question = {type = "string", optional = true, description = "Run a single question instead of batch evaluation"}
+debug_prompt = {type = "string", optional = true, description = "Run an exact debug prompt instead of CoVe planning"}
+debug_stop_json = {type = "string", optional = true, description = "JSON array of textual stop sequences for debug_prompt"}
+debug_max_tokens = {type = "string", optional = true, description = "Maximum decode tokens for debug_prompt"}
+verbose = {type = "bool", optional = true, description = "Print intermediate CoVe steps"}
