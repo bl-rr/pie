@@ -9,6 +9,7 @@ use crate::{ChatFormatter, Model, Queue, Sampler, Tokenizer};
 use futures::future::join_all;
 use std::cmp::Ordering;
 use std::mem;
+use std::time::Instant;
 
 #[derive(Debug)]
 pub struct Context {
@@ -33,6 +34,25 @@ pub struct Context {
     pub adapter_random_seed: Option<i64>,
 
     pub begin_of_sequence: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DecodeStepProfile {
+    pub pending_tokens: usize,
+    pub kv_page_count: usize,
+    pub mask_rows: usize,
+    pub mask_words: usize,
+    pub prep_ms: f64,
+    pub create_forward_ms: f64,
+    pub adapter_setup_ms: f64,
+    pub input_tokens_ms: f64,
+    pub kv_cache_ms: f64,
+    pub attention_mask_ms: f64,
+    pub sampling_setup_ms: f64,
+    pub execute_ms: f64,
+    pub sample_extract_ms: f64,
+    pub commit_ms: f64,
+    pub total_ms: f64,
 }
 
 impl Context {
@@ -476,32 +496,42 @@ impl Context {
     /// A `Result` containing the `Distribution` over the next possible tokens,
     /// or an error if the generation step could not be performed.
     pub async fn decode_step(&mut self, sampler: &Sampler) -> u32 {
+        self.decode_step_profiled(sampler).await.0
+    }
+
+    /// Performs a single autoregressive decoding step and returns timing for
+    /// the guest-side setup around the model execution.
+    pub async fn decode_step_profiled(&mut self, sampler: &Sampler) -> (u32, DecodeStepProfile) {
         assert!(
             !self.token_ids_pending.is_empty(),
             "Must have at least one seed token"
         );
 
+        let total_start = Instant::now();
         let pending_token_ids = mem::take(&mut self.token_ids_pending);
         let last_pos_id = self.position_ids.last().map(|&p| p + 1).unwrap_or(0);
+        let prep_start = Instant::now();
         let position_ids =
             (last_pos_id..(last_pos_id + pending_token_ids.len() as u32)).collect::<Vec<u32>>();
-
         self.grow_kv_pages(pending_token_ids.len());
-
-        // println!("next token id: {}", next_token_id);
-        // println!("next pos id: {}", next_pos_id);
-        // println!("kv page last len: {}", self.kv_page_last_len);
-        // println!("kv page ids: {:?}", &self.kv_page_ids);
-        // println!("token ids: {:?}", &self.token_ids);
-        // println!("token ids pending: {:?}", &self.token_ids_pending);
-
         let mask = mem::take(&mut self.token_mask_pending)
             .into_iter()
             .map(|brie| brie.buffer)
             .collect::<Vec<Vec<u32>>>();
+        let mut profile = DecodeStepProfile {
+            pending_tokens: pending_token_ids.len(),
+            kv_page_count: self.kv_pages.len(),
+            mask_rows: mask.len(),
+            mask_words: mask.iter().map(|row| row.len()).sum(),
+            prep_ms: prep_start.elapsed().as_secs_f64() * 1000.0,
+            ..DecodeStepProfile::default()
+        };
 
+        let create_forward_start = Instant::now();
         let p = self.queue.create_forward_pass();
+        profile.create_forward_ms = create_forward_start.elapsed().as_secs_f64() * 1000.0;
 
+        let adapter_setup_start = Instant::now();
         if let Some(adapter_ptr) = self.adapter_ptr {
             p.set_adapter(adapter_ptr);
 
@@ -509,12 +539,22 @@ impl Context {
                 p.set_adapter_seed(adapter_random_seed);
             }
         }
+        profile.adapter_setup_ms = adapter_setup_start.elapsed().as_secs_f64() * 1000.0;
 
+        let input_tokens_start = Instant::now();
         p.input_tokens(&pending_token_ids, &position_ids);
+        profile.input_tokens_ms = input_tokens_start.elapsed().as_secs_f64() * 1000.0;
+
+        let kv_cache_start = Instant::now();
         p.kv_cache(&self.kv_pages, self.kv_page_last_len);
+        profile.kv_cache_ms = kv_cache_start.elapsed().as_secs_f64() * 1000.0;
+
+        let attention_mask_start = Instant::now();
         p.attention_mask(&mask);
+        profile.attention_mask_ms = attention_mask_start.elapsed().as_secs_f64() * 1000.0;
 
         let output_idx = pending_token_ids.len() as u32 - 1;
+        let sampling_setup_start = Instant::now();
         match sampler {
             Sampler::Custom {
                 temperature,
@@ -542,9 +582,13 @@ impl Context {
                 p.output_tokens_top_k_top_p(&[output_idx], *temperature, *top_k, *top_p);
             }
         }
+        profile.sampling_setup_ms = sampling_setup_start.elapsed().as_secs_f64() * 1000.0;
 
+        let execute_start = Instant::now();
         let res = p.execute().await;
+        profile.execute_ms = execute_start.elapsed().as_secs_f64() * 1000.0;
 
+        let sample_extract_start = Instant::now();
         let sampled = match sampler {
             Sampler::Custom {
                 temperature: _temperature,
@@ -559,11 +603,15 @@ impl Context {
                 sampled
             }
         };
+        profile.sample_extract_ms = sample_extract_start.elapsed().as_secs_f64() * 1000.0;
 
+        let commit_start = Instant::now();
         self.token_ids.extend(pending_token_ids);
         self.position_ids.extend(position_ids);
+        profile.commit_ms = commit_start.elapsed().as_secs_f64() * 1000.0;
+        profile.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
 
-        sampled
+        (sampled, profile)
     }
 
     /// Performs a single, atomic autoregressive decoding step.

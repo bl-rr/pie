@@ -1812,6 +1812,26 @@ async fn generate_default_verification_tasks(
     stop_sequences: &StopSequences,
 ) -> Vec<VerificationTask> {
     if cove_cfg.paper_faithful {
+        let strategy = effective_paper_execute_strategy(cove_cfg);
+        if cove_cfg.cove_variant == CoVeVariant::TwoStep
+            && matches!(
+                strategy,
+                PaperExecuteStrategy::MaskedChain | PaperExecuteStrategy::MaskedChainNoDrop
+            )
+        {
+            return generate_default_verification_tasks_two_step_masked(
+                model,
+                module_cache,
+                question,
+                baseline,
+                chain_type,
+                max_questions,
+                max_tokens,
+                temperature,
+                matches!(strategy, PaperExecuteStrategy::MaskedChain),
+            )
+            .await;
+        }
         let ctx = module_cache
             .paper
             .verification_prompt(chain_type)
@@ -2001,6 +2021,10 @@ fn paper_execute_tail(question: &str) -> String {
     format!("{}\nA:", question)
 }
 
+fn paper_two_step_question_tail(question: &str) -> String {
+    format!("{}\n", question.trim())
+}
+
 fn select_padding_token_id(model: &Model) -> u32 {
     let tokenizer = model.get_tokenizer();
     for candidate in ["\n", " ", "\t", ".", ","] {
@@ -2035,6 +2059,82 @@ async fn pad_context_to_page_boundary(ctx: &mut Context, pad_token_id: u32) {
     }
     ctx.fill_tokens(vec![pad_token_id; needed]);
     ctx.flush().await;
+}
+
+async fn generate_default_verification_tasks_two_step_masked(
+    model: &Model,
+    module_cache: &ModuleCache,
+    question: &str,
+    baseline: &str,
+    chain_type: ChainType,
+    max_questions: usize,
+    max_tokens: usize,
+    temperature: f32,
+    drop_pages: bool,
+) -> Vec<VerificationTask> {
+    if max_questions == 0 {
+        return Vec::new();
+    }
+
+    let pad_token_id = select_padding_token_id(model);
+    let continuation_token_id = select_continuation_token_id(model);
+    let mut chain_ctx = module_cache
+        .paper
+        .verification_prompt(chain_type)
+        .fork_with_tail(&format!("{}\nA: {}\nResponse:", question, baseline));
+    pad_context_to_page_boundary(&mut chain_ctx, pad_token_id).await;
+
+    let newline_stop = vec!["\n".to_string()];
+    let newline_stop_tokens = stop_tokens_for_text(model, &newline_stop);
+    let mut tasks = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut first_block_start = chain_ctx.get_token_ids().len();
+
+    for idx in 0..max_questions {
+        let current_start = chain_ctx.get_token_ids().len();
+        if idx == 0 {
+            first_block_start = current_start;
+        }
+
+        let mut branch = chain_ctx.fork();
+        if idx > 0 && current_start > first_block_start {
+            branch.mask_token_range(first_block_start, current_start, true);
+            if drop_pages {
+                branch.drop_masked_kv_pages();
+            }
+        }
+        branch.fill_token(continuation_token_id);
+
+        let generated = generate_from_context(
+            branch,
+            max_tokens,
+            temperature,
+            &newline_stop_tokens,
+            &newline_stop,
+        )
+        .await;
+
+        let parsed = parse_verification_questions(&generated, 1);
+        let Some(next_question) = parsed.into_iter().next() else {
+            break;
+        };
+        if !seen.insert(next_question.clone()) {
+            break;
+        }
+
+        chain_ctx.fill(&paper_two_step_question_tail(&next_question));
+        chain_ctx.flush().await;
+        tasks.push(VerificationTask {
+            candidate: None,
+            question: next_question,
+        });
+
+        if idx + 1 < max_questions {
+            pad_context_to_page_boundary(&mut chain_ctx, pad_token_id).await;
+        }
+    }
+
+    tasks
 }
 
 async fn execute_verification_paper_fat_prompt(
@@ -2154,6 +2254,7 @@ async fn execute_verification_paper_masked_chain(
     max_tokens: usize,
     temperature: f32,
     paper_stop_text: &[String],
+    drop_pages: bool,
 ) -> (Vec<VerificationRecord>, KvOptimizationStats) {
     if tasks.is_empty() {
         return (Vec::new(), KvOptimizationStats::default());
@@ -2187,7 +2288,9 @@ async fn execute_verification_paper_masked_chain(
             if idx > 0 && current_start > first_start {
                 let before_pages = ctx.kv_pages.len();
                 ctx.mask_token_range(first_start, current_start, true);
-                ctx.drop_masked_kv_pages();
+                if drop_pages {
+                    ctx.drop_masked_kv_pages();
+                }
                 kv_optimization.question_mask_attempts += 1;
                 kv_optimization.question_mask_tokens_masked +=
                     (current_start - first_start) as u64;
@@ -2211,6 +2314,111 @@ async fn execute_verification_paper_masked_chain(
                 VerificationRecord {
                     candidate: task.candidate,
                     question: task.question,
+                    answer,
+                    verdict: VerificationVerdict::Ambiguous,
+                },
+                kv_optimization,
+            )
+        }
+    });
+
+    let mut kv_optimization = KvOptimizationStats::default();
+    let records = join_all(futures)
+        .await
+        .into_iter()
+        .map(|(record, optimization)| {
+            kv_optimization.merge(&optimization);
+            record
+        })
+        .collect();
+    (records, kv_optimization)
+}
+
+async fn execute_verification_paper_two_step_masked(
+    model: &Model,
+    module_cache: &ModuleCache,
+    tasks: &[VerificationTask],
+    chain_type: ChainType,
+    max_tokens: usize,
+    temperature: f32,
+    paper_stop_text: &[String],
+    drop_pages: bool,
+) -> (Vec<VerificationRecord>, KvOptimizationStats) {
+    if tasks.is_empty() {
+        return (Vec::new(), KvOptimizationStats::default());
+    }
+
+    let pad_token_id = select_padding_token_id(model);
+    let continuation_token_id = select_continuation_token_id(model);
+    let mut chain_ctx = module_cache.paper.two_step_execute_prompt(chain_type).fork_with_tail("");
+    pad_context_to_page_boundary(&mut chain_ctx, pad_token_id).await;
+
+    let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(tasks.len());
+    let mut questions = Vec::with_capacity(tasks.len());
+
+    for (idx, task) in tasks.iter().enumerate() {
+        let start = chain_ctx.get_token_ids().len();
+        chain_ctx.fill(&paper_two_step_question_tail(&task.question));
+        chain_ctx.flush().await;
+        let end = chain_ctx.get_token_ids().len();
+        ranges.push((start, end));
+        questions.push(task.question.clone());
+        if idx + 1 < tasks.len() {
+            pad_context_to_page_boundary(&mut chain_ctx, pad_token_id).await;
+        }
+    }
+
+    chain_ctx.fill("Response:");
+    chain_ctx.flush().await;
+
+    let futures = tasks.iter().cloned().enumerate().map(|(idx, task)| {
+        let mut branch = chain_ctx.fork();
+        let stop_text = paper_stop_text.to_vec();
+        let ranges = ranges.clone();
+        let questions = questions.clone();
+        async move {
+            let mut kv_optimization = KvOptimizationStats::default();
+            let before_pages = branch.kv_pages.len();
+            let mut masked_tokens = 0usize;
+
+            for (other_idx, (start, end)) in ranges.iter().copied().enumerate() {
+                if other_idx == idx {
+                    continue;
+                }
+                if end > start {
+                    branch.mask_token_range(start, end, true);
+                    masked_tokens += end - start;
+                }
+            }
+
+            if drop_pages {
+                branch.drop_masked_kv_pages();
+            }
+            if masked_tokens > 0 {
+                kv_optimization.question_mask_attempts += 1;
+                kv_optimization.question_mask_tokens_masked += masked_tokens as u64;
+                kv_optimization.question_mask_pages_dropped +=
+                    before_pages.saturating_sub(branch.kv_pages.len()) as u64;
+            }
+            branch.fill_token(continuation_token_id);
+
+            let text = generate_from_context(
+                branch,
+                max_tokens,
+                temperature,
+                &stop_tokens_for_text(model, &stop_text),
+                &stop_text,
+            )
+            .await;
+            let answer = parse_numbered_answers(&text, 1)
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| text.trim().to_string());
+
+            (
+                VerificationRecord {
+                    candidate: task.candidate,
+                    question: questions[idx].clone(),
                     answer,
                     verdict: VerificationVerdict::Ambiguous,
                 },
@@ -2262,6 +2470,23 @@ async fn execute_verification_parallel_default(
             .collect::<Vec<_>>();
         let stop_text =
             paper_stop_sequences("two_step_execute", chain_type.as_str(), max_wiki_items);
+        let strategy = effective_paper_execute_strategy(cove_cfg);
+        if matches!(
+            strategy,
+            PaperExecuteStrategy::MaskedChain | PaperExecuteStrategy::MaskedChainNoDrop
+        ) {
+            return execute_verification_paper_two_step_masked(
+                model,
+                module_cache,
+                tasks,
+                chain_type,
+                paper_batch_tokens(cove_cfg, chain_type),
+                temperature,
+                &stop_text,
+                matches!(strategy, PaperExecuteStrategy::MaskedChain),
+            )
+            .await;
+        }
         let ctx = module_cache
             .paper
             .two_step_execute_prompt(chain_type)
@@ -2331,6 +2556,21 @@ async fn execute_verification_parallel_default(
                     max_tokens,
                     temperature,
                     &paper_stop_text,
+                    true,
+                )
+                .await
+            }
+            PaperExecuteStrategy::MaskedChainNoDrop => {
+                execute_verification_paper_masked_chain(
+                    model,
+                    module_cache,
+                    tasks,
+                    chain_type,
+                    cove_cfg,
+                    max_tokens,
+                    temperature,
+                    &paper_stop_text,
+                    false,
                 )
                 .await
             }

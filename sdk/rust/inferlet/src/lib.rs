@@ -1,5 +1,5 @@
 pub use crate::chat::ChatFormatter;
-pub use crate::context::Context;
+pub use crate::context::{Context, DecodeStepProfile};
 pub use crate::sampler::Sampler;
 use crate::stop_condition::StopCondition;
 use crate::wstd::runtime::AsyncPollable;

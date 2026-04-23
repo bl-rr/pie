@@ -161,6 +161,7 @@ pub enum PaperExecuteStrategy {
     Auto,
     FatPrompt,
     MaskedChain,
+    MaskedChainNoDrop,
     SharedRoot,
     SharedRootText,
 }
@@ -171,6 +172,7 @@ impl PaperExecuteStrategy {
             PaperExecuteStrategy::Auto => "auto",
             PaperExecuteStrategy::FatPrompt => "fat_prompt",
             PaperExecuteStrategy::MaskedChain => "masked_chain",
+            PaperExecuteStrategy::MaskedChainNoDrop => "masked_chain_no_drop",
             PaperExecuteStrategy::SharedRoot => "shared_root",
             PaperExecuteStrategy::SharedRootText => "shared_root_text",
         }
