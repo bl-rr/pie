@@ -7,6 +7,8 @@ use crate::telemetry;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+const EMPTY_PIPELINE_COALESCE: Duration = Duration::from_millis(2);
+
 // =============================================================================
 // Configuration
 // =============================================================================
@@ -281,9 +283,22 @@ impl AdaptiveScheduler {
             }
         }
 
-        // If no batches are in flight, we should fire to keep GPU busy
-        // (pipeline is empty - need to start it)
+        // If the pipeline is empty, briefly coalesce sibling resumes before
+        // firing the next batch to avoid decode fragmentation.
         if in_flight_batches == 0 {
+            if let Some(start) = self.batch_start_time {
+                if start.elapsed() < EMPTY_PIPELINE_COALESCE {
+                    tracing::trace!(
+                        target: "scheduler.decision",
+                        group_id = group_id,
+                        decision = "wait_empty_pipeline_coalesce",
+                        batch_size = current_batch_size,
+                        "Waiting: empty pipeline coalesce window"
+                    );
+                    return false;
+                }
+            }
+
             tracing::trace!(
                 target: "scheduler.decision",
                 group_id = group_id,
@@ -383,6 +398,31 @@ impl AdaptiveScheduler {
         );
         false
     }
+
+    fn coalesce_delay_remaining(
+        &self,
+        current_batch_size: usize,
+        current_total_tokens: usize,
+        max_batch_size: usize,
+        max_batch_tokens: usize,
+        in_flight_batches: usize,
+    ) -> Option<Duration> {
+        if current_batch_size == 0
+            || current_batch_size >= max_batch_size
+            || current_total_tokens >= max_batch_tokens
+            || in_flight_batches != 0
+        {
+            return None;
+        }
+
+        let start = self.batch_start_time?;
+        let elapsed = start.elapsed();
+        if elapsed < EMPTY_PIPELINE_COALESCE {
+            Some(EMPTY_PIPELINE_COALESCE - elapsed)
+        } else {
+            None
+        }
+    }
 }
 
 use std::collections::HashMap;
@@ -400,7 +440,7 @@ impl MultiGroupScheduler {
         for i in 0..num_groups {
             schedulers.insert(i, AdaptiveScheduler::new(config.clone(), max_batch_size));
         }
-        
+
         Self {
             schedulers,
             config,
@@ -448,7 +488,27 @@ impl MultiGroupScheduler {
             false
         }
     }
-    
+
+    pub fn next_wake_delay(
+        &self,
+        group_id: usize,
+        current_batch_size: usize,
+        current_total_tokens: usize,
+        max_batch_size: usize,
+        max_batch_tokens: usize,
+        in_flight_batches: usize,
+    ) -> Option<Duration> {
+        self.schedulers.get(&group_id).and_then(|sched| {
+            sched.coalesce_delay_remaining(
+                current_batch_size,
+                current_total_tokens,
+                max_batch_size,
+                max_batch_tokens,
+                in_flight_batches,
+            )
+        })
+    }
+
     /// Get aggregate metrics across all groups. Returns (tokens_per_second, avg_latency_ms).
     pub fn get_aggregate_metrics(&self) -> (f64, f64) {
         let mut total_tps = 0.0;
@@ -469,3 +529,75 @@ impl MultiGroupScheduler {
 
 /// Shared scheduler state wrapped in Arc<Mutex> for thread-safe access.
 pub type SharedScheduler = Arc<Mutex<MultiGroupScheduler>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_scheduler() -> AdaptiveScheduler {
+        AdaptiveScheduler::new(SchedulerConfig::default(), 8)
+    }
+
+    #[test]
+    fn should_wait_during_empty_pipeline_coalesce() {
+        let mut scheduler = make_scheduler();
+        scheduler.batch_start_time = Some(Instant::now());
+
+        let should_fire = scheduler.should_fire(0, 1, 16, 8, 128, 0);
+
+        assert!(!should_fire);
+    }
+
+    #[test]
+    fn should_fire_after_empty_pipeline_coalesce_expires() {
+        let mut scheduler = make_scheduler();
+        scheduler.batch_start_time =
+            Some(Instant::now() - EMPTY_PIPELINE_COALESCE - Duration::from_millis(1));
+
+        let should_fire = scheduler.should_fire(0, 1, 16, 8, 128, 0);
+
+        assert!(should_fire);
+    }
+
+    #[test]
+    fn should_fire_immediately_at_capacity_even_during_coalesce() {
+        let mut scheduler = make_scheduler();
+        scheduler.batch_start_time = Some(Instant::now());
+
+        let should_fire = scheduler.should_fire(0, 8, 128, 8, 128, 0);
+
+        assert!(should_fire);
+    }
+
+    #[test]
+    fn should_keep_waiting_for_small_batch_when_pipeline_not_empty() {
+        let mut scheduler = make_scheduler();
+        scheduler.batch_start_time = Some(Instant::now());
+
+        let should_fire = scheduler.should_fire(0, 1, 16, 8, 128, 1);
+
+        assert!(!should_fire);
+    }
+
+    #[test]
+    fn coalesce_delay_is_exposed_while_window_is_open() {
+        let mut scheduler = make_scheduler();
+        scheduler.batch_start_time = Some(Instant::now());
+
+        let delay = scheduler.coalesce_delay_remaining(1, 16, 8, 128, 0);
+
+        assert!(delay.is_some());
+        assert!(delay.unwrap() <= EMPTY_PIPELINE_COALESCE);
+    }
+
+    #[test]
+    fn coalesce_delay_is_absent_after_window_expires() {
+        let mut scheduler = make_scheduler();
+        scheduler.batch_start_time =
+            Some(Instant::now() - EMPTY_PIPELINE_COALESCE - Duration::from_millis(1));
+
+        let delay = scheduler.coalesce_delay_remaining(1, 16, 8, 128, 0);
+
+        assert!(delay.is_none());
+    }
+}

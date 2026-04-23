@@ -421,7 +421,11 @@ impl Model {
     /// - Uses per-group backends for parallel DP execution
     async fn inference_worker(
         backends: Vec<RpcBackend>,
-        mut req_rx: mpsc::UnboundedReceiver<(ForwardPassRequest, Option<oneshot::Sender<ForwardPassResponse>>, usize)>,
+        mut req_rx: mpsc::UnboundedReceiver<(
+            ForwardPassRequest,
+            Option<oneshot::Sender<ForwardPassResponse>>,
+            usize,
+        )>,
         mut shutdown_rx: broadcast::Receiver<()>,
         max_batch_tokens: usize,
         max_batch_size: usize,
@@ -462,29 +466,46 @@ impl Model {
             let all_batches_empty = batches.iter().all(|b| b.is_empty());
 
             if all_batches_empty {
-                let first_request = tokio::select! {
+                let any_in_flight = in_flight_counts.iter().any(|&c| c > 0);
+
+                tokio::select! {
                     _ = shutdown_rx.recv() => break,
-                    maybe_req = req_rx.recv() => {
-                        match maybe_req {
-                            Some(req) => req,
+                    maybe_completion = completion_rx.recv(), if any_in_flight => {
+                        match maybe_completion {
+                            Some((batch_size, tokens_in_batch, latency, group_id)) => {
+                                if group_id < num_groups {
+                                    if in_flight_counts[group_id] > 0 {
+                                        in_flight_counts[group_id] -= 1;
+                                    }
+                                    let mut sched = scheduler.lock().unwrap();
+                                    sched.on_batch_complete(group_id, batch_size, tokens_in_batch, latency);
+                                }
+                                continue;
+                            }
                             None => break,
                         }
                     }
-                };
+                    maybe_req = req_rx.recv() => {
+                        let first_request = match maybe_req {
+                            Some(req) => req,
+                            None => break,
+                        };
 
-                // Add to appropriate group batch
-                let (req, tx, group_id) = first_request;
-                // Safety: clamp group_id
-                let group_id = std::cmp::min(group_id, num_groups - 1);
+                        // Add to appropriate group batch
+                        let (req, tx, group_id) = first_request;
+                        // Safety: clamp group_id
+                        let group_id = std::cmp::min(group_id, num_groups - 1);
 
-                {
-                    let mut sched = scheduler.lock().unwrap();
-                    let arrival_time = req.arrival_time.unwrap_or_else(Instant::now);
-                    sched.on_request_arrival(group_id, arrival_time);
+                        {
+                            let mut sched = scheduler.lock().unwrap();
+                            let arrival_time = req.arrival_time.unwrap_or_else(Instant::now);
+                            sched.on_request_arrival(group_id, arrival_time);
+                        }
+                        group_tokens[group_id] += req.input_tokens.len();
+                        batches[group_id].push((req, tx));
+                        prof_requests_received[group_id] += 1;
+                    }
                 }
-                group_tokens[group_id] += req.input_tokens.len();
-                batches[group_id].push((req, tx));
-                prof_requests_received[group_id] += 1;
             }
 
             // Try to accumulate more requests (non-blocking)
@@ -512,6 +533,7 @@ impl Model {
 
             // Check all groups for firing
             let mut fired_any = false;
+            let mut next_wake_delay = None;
             for group_id in 0..num_groups {
                 let batch_len = batches[group_id].len();
                 if batch_len == 0 {
@@ -521,9 +543,25 @@ impl Model {
                 let total_tok = group_tokens[group_id];
                 let in_flight = in_flight_counts[group_id];
 
-                let should_fire = {
+                let (should_fire, wake_delay) = {
                     let mut sched = scheduler.lock().unwrap();
-                    sched.should_fire(group_id, batch_len, total_tok, max_batch_size, max_batch_tokens, in_flight)
+                    let wake_delay = sched.next_wake_delay(
+                        group_id,
+                        batch_len,
+                        total_tok,
+                        max_batch_size,
+                        max_batch_tokens,
+                        in_flight,
+                    );
+                    let should_fire = sched.should_fire(
+                        group_id,
+                        batch_len,
+                        total_tok,
+                        max_batch_size,
+                        max_batch_tokens,
+                        in_flight,
+                    );
+                    (should_fire, wake_delay)
                 };
 
                 if should_fire && in_flight < max_in_flight_batches {
@@ -534,7 +572,7 @@ impl Model {
                     fired_any = true;
                     prof_batches_fired[group_id] += 1;
 
-                     {
+                    {
                         let mut sched = scheduler.lock().unwrap();
                         sched.on_batch_fired(group_id);
                     }
@@ -544,12 +582,25 @@ impl Model {
                     let completion_tx_clone = completion_tx.clone();
                     let batch_size = batch_len;
                     let tokens_in_batch = total_tok;
-                    
+
                     tokio::spawn(async move {
-                         let start_time = Instant::now();
-                         Self::execute_forward_pass_batch(&backend_clone, batch_to_fire, group_id, REQUEST_TIMEOUT).await;
-                         let latency = start_time.elapsed();
-                         completion_tx_clone.send((batch_size, tokens_in_batch, latency, group_id)).ok();
+                        let start_time = Instant::now();
+                        Self::execute_forward_pass_batch(
+                            &backend_clone,
+                            batch_to_fire,
+                            group_id,
+                            REQUEST_TIMEOUT,
+                        )
+                        .await;
+                        let latency = start_time.elapsed();
+                        completion_tx_clone
+                            .send((batch_size, tokens_in_batch, latency, group_id))
+                            .ok();
+                    });
+                } else if let Some(delay) = wake_delay {
+                    next_wake_delay = Some(match next_wake_delay {
+                        Some(existing) => std::cmp::min(existing, delay),
+                        None => delay,
                     });
                 }
             }
@@ -558,13 +609,21 @@ impl Model {
             if prof_last_report.elapsed().as_secs() >= 10 {
                 let total_reqs: usize = prof_requests_received.iter().sum();
                 let total_batches: usize = prof_batches_fired.iter().sum();
-                eprintln!("[RUST PROFILING] Reqs: {:?} ({}) | Batches: {:?} ({}) | InFlight: {:?}",
-                    prof_requests_received, total_reqs,
-                    prof_batches_fired, total_batches,
-                    in_flight_counts);
+                eprintln!(
+                    "[RUST PROFILING] Reqs: {:?} ({}) | Batches: {:?} ({}) | InFlight: {:?}",
+                    prof_requests_received,
+                    total_reqs,
+                    prof_batches_fired,
+                    total_batches,
+                    in_flight_counts
+                );
                 // Reset counters
-                for c in &mut prof_requests_received { *c = 0; }
-                for c in &mut prof_batches_fired { *c = 0; }
+                for c in &mut prof_requests_received {
+                    *c = 0;
+                }
+                for c in &mut prof_batches_fired {
+                    *c = 0;
+                }
                 prof_last_report = Instant::now();
             }
 
@@ -589,28 +648,43 @@ impl Model {
                             }
                         }
                     }
-                 } else {
-                     // Just wait briefly for more requests
-                     tokio::select! {
-                        _ = shutdown_rx.recv() => break,
-                        _ = tokio::time::sleep(SCHEDULER_POLL_INTERVAL) => {}
-                        maybe_req = req_rx.recv() => {
-                             match maybe_req {
-                                Some((req, tx, group_id)) => {
-                                    let group_id = std::cmp::min(group_id, num_groups - 1);
-                                    {
-                                        let mut sched = scheduler.lock().unwrap();
-                                        let arrival_time = req.arrival_time.unwrap_or_else(Instant::now);
-                                        sched.on_request_arrival(group_id, arrival_time);
-                                    }
-                                    group_tokens[group_id] += req.input_tokens.len();
-                                    batches[group_id].push((req, tx));
-                                }
-                                None => break,
-                            }
-                         }
-                     }
-                 }
+                } else {
+                    let wait_duration = next_wake_delay.unwrap_or(SCHEDULER_POLL_INTERVAL);
+                    let any_in_flight = in_flight_counts.iter().any(|&c| c > 0);
+
+                    // Prefer request/completion-driven wakeups, and only fall back to
+                    // polling when we don't have a more precise scheduler deadline.
+                    tokio::select! {
+                       _ = shutdown_rx.recv() => break,
+                       maybe_completion = completion_rx.recv(), if any_in_flight => {
+                           if let Some((batch_size, tokens_in_batch, latency, group_id)) = maybe_completion {
+                               if group_id < num_groups {
+                                   if in_flight_counts[group_id] > 0 {
+                                       in_flight_counts[group_id] -= 1;
+                                   }
+                                   let mut sched = scheduler.lock().unwrap();
+                                   sched.on_batch_complete(group_id, batch_size, tokens_in_batch, latency);
+                               }
+                           }
+                       }
+                       _ = tokio::time::sleep(wait_duration) => {}
+                       maybe_req = req_rx.recv() => {
+                            match maybe_req {
+                               Some((req, tx, group_id)) => {
+                                   let group_id = std::cmp::min(group_id, num_groups - 1);
+                                   {
+                                       let mut sched = scheduler.lock().unwrap();
+                                       let arrival_time = req.arrival_time.unwrap_or_else(Instant::now);
+                                       sched.on_request_arrival(group_id, arrival_time);
+                                   }
+                                   group_tokens[group_id] += req.input_tokens.len();
+                                   batches[group_id].push((req, tx));
+                               }
+                               None => break,
+                           }
+                        }
+                    }
+                }
             }
         }
 
@@ -618,7 +692,13 @@ impl Model {
         for group_id in 0..num_groups {
             if !batches[group_id].is_empty() {
                 let batch = std::mem::take(&mut batches[group_id]);
-                Self::execute_forward_pass_batch(&backends[group_id], batch, group_id, REQUEST_TIMEOUT).await;
+                Self::execute_forward_pass_batch(
+                    &backends[group_id],
+                    batch,
+                    group_id,
+                    REQUEST_TIMEOUT,
+                )
+                .await;
             }
         }
 
