@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional, Callable, Any
 
@@ -19,8 +20,60 @@ if is_apple_silicon():
     import flashinfer_metal as ops  # type: ignore[import-not-found]
 else:
     import flashinfer as ops  # type: ignore[import-not-found,no-redef]
+    import triton
+    import triton.language as tl
 
 from . import common
+
+
+if not is_apple_silicon():
+
+    @triton.jit
+    def _rope_realign_paged_k_kernel(
+        kv_cache,
+        page_ids,
+        deltas,
+        inv_freq,
+        n_tokens: tl.constexpr,
+        stride_page: tl.constexpr,
+        stride_token: tl.constexpr,
+        stride_head: tl.constexpr,
+        n_heads: tl.constexpr,
+        head_dim: tl.constexpr,
+        page_size: tl.constexpr,
+        BLOCK: tl.constexpr,
+    ):
+        offsets = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        half_dim = head_dim // 2
+        total = n_tokens * n_heads * half_dim
+        mask = offsets < total
+
+        dim = offsets % half_dim
+        tmp = offsets // half_dim
+        head = tmp % n_heads
+        token_idx = tmp // n_heads
+        page_slot = token_idx // page_size
+        token_in_page = token_idx % page_size
+
+        page_id = tl.load(page_ids + page_slot, mask=mask, other=0).to(tl.int64)
+        delta = tl.load(deltas + token_idx, mask=mask, other=0.0).to(tl.float32)
+        freq = tl.load(inv_freq + dim, mask=mask, other=0.0).to(tl.float32)
+        angle = delta * freq
+        c = tl.cos(angle)
+        s = tl.sin(angle)
+
+        base = (
+            page_id * stride_page
+            + token_in_page * stride_token
+            + head * stride_head
+        )
+        x1_ptr = kv_cache + base + dim
+        x2_ptr = kv_cache + base + half_dim + dim
+
+        x1 = tl.load(x1_ptr, mask=mask).to(tl.float32)
+        x2 = tl.load(x2_ptr, mask=mask).to(tl.float32)
+        tl.store(x1_ptr, x1 * c - x2 * s, mask=mask)
+        tl.store(x2_ptr, x1 * s + x2 * c, mask=mask)
 
 
 # =============================================================================
@@ -311,6 +364,150 @@ class ForwardPass:
         self.wrapper_decode_fallback = ops.BatchDecodeWithPagedKVCacheWrapper(
             self.workspace_buffer, "NHD"
         )
+
+    def _llama31_inv_freq(self) -> torch.Tensor:
+        """Return Llama 3.1 scaled RoPE inverse frequencies on this engine's device."""
+        head_dim = self.model_config.dim_head
+        device = self.runtime_config.device
+        freqs = 1.0 / (
+            self.model_config.rope_theta
+            ** (
+                torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
+                / head_dim
+            )
+        )
+
+        low_freq_wavelen = (
+            self.model_config.rope_original_max_position_embeddings
+            / self.model_config.rope_low_frequency_factor
+        )
+        high_freq_wavelen = (
+            self.model_config.rope_original_max_position_embeddings
+            / self.model_config.rope_high_frequency_factor
+        )
+        wavelen = 2 * math.pi / freqs
+
+        inv_freq_llama = torch.where(
+            wavelen > low_freq_wavelen, freqs / self.model_config.rope_factor, freqs
+        )
+        smooth = (
+            self.model_config.rope_original_max_position_embeddings / wavelen
+            - self.model_config.rope_low_frequency_factor
+        ) / (
+            self.model_config.rope_high_frequency_factor
+            - self.model_config.rope_low_frequency_factor
+        )
+        smoothed = (
+            (1 - smooth) * (freqs / self.model_config.rope_factor) + smooth * freqs
+        )
+        is_medium = (wavelen <= low_freq_wavelen) & (wavelen >= high_freq_wavelen)
+        return torch.where(is_medium, smoothed, inv_freq_llama)
+
+    @torch.inference_mode()
+    def realign_kv_cache_rope(
+        self,
+        kv_cache_at_layer: list[torch.Tensor],
+        kv_page_ptrs: list[int],
+        old_position_ids: list[int],
+        new_position_ids: list[int],
+        kv_page_last_len: int,
+    ) -> dict[str, int]:
+        """Rotate already-cached K vectors from old RoPE positions to new positions.
+
+        This is an experimental helper for studying position compaction. It mutates
+        the K half of the supplied KV pages in-place. V is left unchanged.
+        """
+        if len(old_position_ids) != len(new_position_ids):
+            raise ValueError(
+                "old_position_ids and new_position_ids must have the same length"
+            )
+        if not kv_page_ptrs:
+            raise ValueError("kv_page_ptrs must not be empty")
+
+        page_size = self.runtime_config.kv_page_size
+        expected_tokens = (len(kv_page_ptrs) - 1) * page_size + kv_page_last_len
+        if expected_tokens != len(old_position_ids):
+            raise ValueError(
+                "position id count does not match KV pages: "
+                f"expected {expected_tokens}, got {len(old_position_ids)}"
+            )
+
+        device = self.runtime_config.device
+        page_ids = torch.as_tensor(kv_page_ptrs, device=device, dtype=torch.long)
+        old_pos = torch.as_tensor(old_position_ids, device=device, dtype=torch.float32)
+        new_pos = torch.as_tensor(new_position_ids, device=device, dtype=torch.float32)
+        deltas = new_pos - old_pos
+
+        inv_freq = self._llama31_inv_freq()
+
+        if self.runtime_config.device.type == "cuda" and not is_apple_silicon():
+            n_tokens = len(old_position_ids)
+            n_heads = int(kv_cache_at_layer[0].shape[3])
+            head_dim = int(kv_cache_at_layer[0].shape[4])
+            half_dim = head_dim // 2
+            block = 256
+            grid = (triton.cdiv(n_tokens * n_heads * half_dim, block),)
+            for kv_cache_layer in kv_cache_at_layer:
+                _rope_realign_paged_k_kernel[grid](
+                    kv_cache_layer,
+                    page_ids,
+                    deltas,
+                    inv_freq,
+                    n_tokens,
+                    kv_cache_layer.stride(0),
+                    kv_cache_layer.stride(2),
+                    kv_cache_layer.stride(3),
+                    n_heads,
+                    head_dim,
+                    page_size,
+                    BLOCK=block,
+                    num_warps=4,
+                )
+        else:
+            padded_deltas = torch.zeros(
+                len(kv_page_ptrs) * page_size, device=device, dtype=torch.float32
+            )
+            padded_deltas[: deltas.numel()].copy_(deltas)
+            padded_deltas = padded_deltas.view(len(kv_page_ptrs), page_size)
+
+            angles = padded_deltas[..., None] * inv_freq[None, None, :]
+            cos = torch.cos(angles).to(self.runtime_config.activation_dtype).unsqueeze(2)
+            sin = torch.sin(angles).to(self.runtime_config.activation_dtype).unsqueeze(2)
+
+            contiguous_pages = (
+                len(kv_page_ptrs) == 1
+                or kv_page_ptrs
+                == list(range(kv_page_ptrs[0], kv_page_ptrs[0] + len(kv_page_ptrs)))
+            )
+
+            def rotate_k_inplace(k: torch.Tensor) -> None:
+                # FlashInfer's default Llama RoPE layout is non-interleaved:
+                # first half rotates against second half.
+                half_dim = k.shape[-1] // 2
+                x1 = k[..., :half_dim]
+                x2 = k[..., half_dim:]
+                old_x1 = x1.clone()
+                old_x2 = x2.clone()
+                x1.copy_(old_x1 * cos - old_x2 * sin)
+                x2.copy_(old_x1 * sin + old_x2 * cos)
+
+            for kv_cache_layer in kv_cache_at_layer:
+                if contiguous_pages:
+                    start = kv_page_ptrs[0]
+                    end = start + len(kv_page_ptrs)
+                    rotate_k_inplace(kv_cache_layer[start:end, 0, :, :, :])
+                else:
+                    # Advanced indexing returns a copy, so scatter the rotated K back.
+                    k = kv_cache_layer[page_ids, 0, :, :, :].clone()
+                    rotate_k_inplace(k)
+                    kv_cache_layer[page_ids, 0, :, :, :] = k
+
+        return {
+            "pages": len(kv_page_ptrs),
+            "tokens": len(old_position_ids),
+            "layers": len(kv_cache_at_layer),
+            "triton": int(self.runtime_config.device.type == "cuda"),
+        }
 
     def warmup_cuda_graphs(self, kv_cache_at_layer: list[torch.Tensor]):
         """

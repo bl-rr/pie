@@ -157,6 +157,39 @@ impl Context {
         self.kv_page_last_len
     }
 
+    /// Experimental: ask the backend to rotate cached K vectors from old RoPE
+    /// positions into new RoPE positions, then install the new position ids.
+    ///
+    /// This uses a narrow control-message encoding over the existing forward API
+    /// to avoid changing the public WIT surface while we evaluate the idea.
+    pub async fn realign_kv_cache_rope(
+        &mut self,
+        old_position_ids: &[u32],
+        new_position_ids: Vec<u32>,
+    ) {
+        assert_eq!(
+            old_position_ids.len(),
+            new_position_ids.len(),
+            "old and new position ids must have the same length"
+        );
+        assert_eq!(
+            old_position_ids.len(),
+            self.token_ids.len(),
+            "position ids must describe the committed KV tokens"
+        );
+
+        let mut packed_position_ids = old_position_ids.to_vec();
+        packed_position_ids.extend_from_slice(&new_position_ids);
+
+        let p = self.queue.create_forward_pass();
+        p.input_tokens(&[], &packed_position_ids);
+        p.kv_cache(&self.kv_pages, self.kv_page_last_len);
+        p.output_tokens(&[0], 1.0);
+        let _ = p.execute().await;
+
+        self.position_ids = new_position_ids;
+    }
+
     /// Creates a safe, copy-on-write fork of the context.
     ///
     /// This method creates a new context that shares the immutable history of the current

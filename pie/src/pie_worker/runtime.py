@@ -1001,6 +1001,70 @@ class Runtime:
 
         return sampling_results
 
+    def _maybe_handle_experimental_kv_rope_realign(self, kwargs: dict) -> dict | None:
+        """Handle an experimental inferlet-driven cached-K RoPE realignment request.
+
+        Encoding convention, intentionally kept narrow for experiments:
+        - `token_ids` is empty
+        - exactly one request is present
+        - `position_ids` is `[old positions..., new positions...]`
+        - `kv_page_indices`/`kv_page_indptr`/`kv_last_page_lens` describe pages to mutate
+        - output-token metadata is present so Rust waits for completion
+        """
+
+        def decode_u32(data) -> np.ndarray:
+            if isinstance(data, bytes):
+                return np.frombuffer(data, dtype=np.uint32)
+            return np.array(data, dtype=np.uint32)
+
+        token_ids = decode_u32(kwargs["token_ids"])
+        position_ids = decode_u32(kwargs["position_ids"])
+        if len(token_ids) != 0 or len(position_ids) == 0:
+            return None
+
+        kv_page_indices = decode_u32(kwargs["kv_page_indices"]).astype(np.int64)
+        kv_page_indptr = decode_u32(kwargs["kv_page_indptr"]).astype(np.int64)
+        kv_last_page_lens = decode_u32(kwargs["kv_last_page_lens"]).astype(np.int64)
+
+        if len(kv_last_page_lens) != 1 or len(kv_page_indptr) != 2:
+            raise ValueError(
+                "experimental KV RoPE realign currently supports exactly one request"
+            )
+        if len(position_ids) % 2 != 0:
+            raise ValueError(
+                "experimental KV RoPE realign requires packed old/new position ids"
+            )
+
+        split = len(position_ids) // 2
+        old_position_ids = position_ids[:split].astype(np.int64).tolist()
+        new_position_ids = position_ids[split:].astype(np.int64).tolist()
+        kv_page_ptrs = kv_page_indices[
+            kv_page_indptr[0] : kv_page_indptr[1]
+        ].tolist()
+
+        if not hasattr(self.engine, "realign_kv_cache_rope"):
+            raise ValueError(
+                f"model engine {type(self.engine).__name__} does not support KV RoPE realign"
+            )
+
+        stats = self.engine.realign_kv_cache_rope(
+            kv_cache_at_layer=self.kv_cache_at_layer,
+            kv_page_ptrs=kv_page_ptrs,
+            old_position_ids=old_position_ids,
+            new_position_ids=new_position_ids,
+            kv_page_last_len=int(kv_last_page_lens[0]),
+        )
+
+        return {
+            "results": [
+                {
+                    "tokens": [0],
+                    "dists": [],
+                }
+            ],
+            "realign_stats": stats,
+        }
+
     # ========================================================================
     # RPC Method Wrappers
     # ========================================================================
@@ -1054,6 +1118,10 @@ class Runtime:
         from .batching import Batch
 
         t_start = time.perf_counter()
+
+        realign_result = self._maybe_handle_experimental_kv_rope_realign(kwargs)
+        if realign_result is not None:
+            return realign_result
 
         # Use group_id from kwargs if present (from Rust), else default to local
         target_group_id = kwargs.get("group_id", self.group_id)
